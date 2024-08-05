@@ -10,7 +10,7 @@ pub trait Exec {
     fn exec(&self) -> Result<()>;
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub struct Process {
     pub name: String,
     pub status: ProcessState,
@@ -31,8 +31,7 @@ impl Process {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-// #[serde(rename_all = "snake_case")]
+#[derive(Clone, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub enum ProcessState {
     Stopped,
     Running,

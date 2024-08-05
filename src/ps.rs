@@ -48,7 +48,9 @@ impl Ps {
 
 impl Exec for Ps {
     fn exec(&self) -> Result<()> {
-        let bins = self.state.get_processes()?.into_iter().map(PsOutput::from);
+        let mut bins = self.state.get_processes()?;
+        bins.sort();
+        let bins = bins.into_iter().map(PsOutput::from);
         let mut table = Table::new(bins);
         table.with(Style::blank());
         println!("{table}");
