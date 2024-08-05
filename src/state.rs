@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     env,
     fs::{create_dir_all, File},
     io::{BufReader, BufWriter},
@@ -45,6 +46,24 @@ impl State {
             .map_err(Error::with_context(InnerError::StateIo))?;
         let reader = BufReader::new(file);
         serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
+    }
+
+    pub fn filter_processes(&self, process_names: &[String]) -> Result<Vec<Process>> {
+        let processes: Vec<Process> = self
+            .get_processes()?
+            .into_iter()
+            .filter(|process| process_names.contains(&process.name))
+            .collect();
+        if process_names.len() != processes.len() {
+            let mut process_names: HashSet<String> = process_names.iter().cloned().collect();
+            for process in processes {
+                process_names.remove(&process.name);
+            }
+            return Err(Error::new(InnerError::ProcessNotFound(
+                process_names.into_iter().collect(),
+            )));
+        }
+        Ok(processes)
     }
 
     pub fn get_processes(&self) -> Result<Vec<Process>> {

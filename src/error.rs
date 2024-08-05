@@ -9,7 +9,14 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn with_context<E: Into<Error>>(inner_error: InnerError) -> impl FnOnce(E) -> Error {
+    pub fn new(inner_error: InnerError) -> Self {
+        Self {
+            inner_error,
+            debug_context: vec![],
+        }
+    }
+
+    pub fn with_context<E: Into<Error>>(inner_error: InnerError) -> impl FnOnce(E) -> Self {
         move |src| {
             let err: Error = src.into();
             err.add_context(inner_error.to_string())
@@ -20,15 +27,6 @@ impl Error {
         self.debug_context.push(context.into());
         self
     }
-
-    // pub fn cast_with_context<E: Into<Error>, S: Into<String>>(
-    //     message: S,
-    // ) -> impl FnOnce(E) -> Error {
-    //     move |src| {
-    //         let netwo_err: Error = src.into();
-    //         netwo_err.add_context(message)
-    //     }
-    // }
 }
 
 impl Display for Error {
@@ -69,6 +67,8 @@ pub enum InnerError {
     Env(String),
     #[error("Filesystem error")]
     Filesystem,
+    #[error("Process not found error")]
+    ProcessNotFound(Vec<String>),
     #[error("State IO error")]
     StateIo,
 

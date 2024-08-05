@@ -4,7 +4,9 @@ mod error;
 mod export_info;
 mod ps;
 mod refresh;
+mod start;
 mod state;
+mod stop;
 
 use core::panic;
 
@@ -12,6 +14,7 @@ use cli::{Cli, CliSubCommand};
 use common::Exec;
 use ps::Ps;
 use refresh::Refresh;
+use start::Start;
 use state::State;
 
 use crate::error::Result;
@@ -25,6 +28,7 @@ fn main() -> Result<()> {
     match cli.sub_command {
         CliSubCommand::Ps(args) => Ps::new(args, state).exec(),
         CliSubCommand::Refresh(args) => Refresh::new(args, state).exec(),
+        CliSubCommand::Start(args) => Start::new(args, state).exec(),
         _ => panic!(),
     }
 }
