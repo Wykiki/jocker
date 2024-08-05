@@ -27,6 +27,7 @@ impl Refresh {
     fn fetch_bins() -> Result<Vec<SerializedPackage>> {
         let metadata = Command::new("cargo")
             .arg("metadata")
+            .arg("--format-version=1")
             .output()
             .map_err(Error::with_context(InnerError::Cargo))?;
         let info: ExportInfoMinimal = serde_json::from_slice(&metadata.stdout).unwrap();
