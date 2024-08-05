@@ -4,7 +4,6 @@ use tabled::{settings::Style, Table, Tabled};
 use crate::{
     common::{tabled_display_option, Exec, Process, ProcessState},
     error::Result,
-    export_info::SerializedPackage,
     state::State,
 };
 
@@ -37,13 +36,13 @@ impl From<Process> for PsOutput {
 }
 
 pub struct Ps {
-    args: PsArgs,
+    _args: PsArgs,
     state: State,
 }
 
 impl Ps {
-    pub fn new(args: PsArgs, state: State) -> Self {
-        Ps { args, state }
+    pub fn new(_args: PsArgs, state: State) -> Self {
+        Ps { _args, state }
     }
 }
 

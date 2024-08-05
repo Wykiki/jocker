@@ -17,7 +17,7 @@ const BINARIES_FILE: &str = "binaries.json";
 const PROCESSES_FILE: &str = "processes.json";
 
 pub struct State {
-    project_dir: PathBuf,
+    _project_dir: PathBuf,
     filename_binaries: String,
     filename_processes: String,
 }
@@ -26,7 +26,7 @@ impl State {
     pub fn new() -> Result<Self> {
         let (project_dir, filename_binaries, filename_processes) = Self::get_or_create_state_dir()?;
         Ok(Self {
-            project_dir,
+            _project_dir: project_dir,
             filename_binaries,
             filename_processes,
         })

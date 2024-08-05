@@ -1,12 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    hash::Hash,
-    io::BufWriter,
-    ops::Add,
-    os::unix::process,
-    process::Command,
-};
+use std::{collections::HashMap, fs::File, hash::Hash, io::BufWriter, process::Command};
 
 use argh::FromArgs;
 
@@ -23,13 +15,13 @@ use crate::{
 pub struct RefreshArgs {}
 
 pub struct Refresh {
-    args: RefreshArgs,
+    _args: RefreshArgs,
     state: State,
 }
 
 impl Refresh {
-    pub fn new(args: RefreshArgs, state: State) -> Self {
-        Refresh { args, state }
+    pub fn new(_args: RefreshArgs, state: State) -> Self {
+        Refresh { _args, state }
     }
 
     fn fetch_bins() -> Result<Vec<SerializedPackage>> {
@@ -90,7 +82,7 @@ impl Refresh {
             .map_err(Error::with_context(InnerError::StateIo))?;
 
         println!("Total processes: {}", new_processes.len());
-        if new_binaries_names.len() > 0 {
+        if !new_binaries_names.is_empty() {
             println!(
                 "Added {} new binaries to the processes list",
                 new_binaries_names.len()
