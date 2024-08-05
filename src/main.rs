@@ -9,6 +9,7 @@ mod state;
 mod stop;
 
 use core::panic;
+use std::sync::Arc;
 
 use cli::{Cli, CliSubCommand};
 use common::Exec;
@@ -24,11 +25,11 @@ fn main() -> Result<()> {
         panic!("platform not supported: windows");
     }
     let cli: Cli = argh::from_env();
-    let state = State::new()?;
+    let state = Arc::new(State::new()?);
     match cli.sub_command {
-        CliSubCommand::Ps(args) => Ps::new(args, state).exec(),
-        CliSubCommand::Refresh(args) => Refresh::new(args, state).exec(),
-        CliSubCommand::Start(args) => Start::new(args, state).exec(),
+        CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec(),
+        CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec(),
+        CliSubCommand::Start(args) => Start::new(args, state.clone()).exec(),
         _ => panic!(),
     }
 }

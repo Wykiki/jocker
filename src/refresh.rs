@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, hash::Hash, io::BufWriter, process::Command};
+use std::{collections::HashMap, fs::File, hash::Hash, io::BufWriter, process::Command, sync::Arc};
 
 use argh::FromArgs;
 
@@ -16,11 +16,11 @@ pub struct RefreshArgs {}
 
 pub struct Refresh {
     _args: RefreshArgs,
-    state: State,
+    state: Arc<State>,
 }
 
 impl Refresh {
-    pub fn new(_args: RefreshArgs, state: State) -> Self {
+    pub fn new(_args: RefreshArgs, state: Arc<State>) -> Self {
         Refresh { _args, state }
     }
 
@@ -75,7 +75,7 @@ impl Refresh {
 
         let mut new_processes = processes.clone();
         for name in &new_binaries_names {
-            new_processes.push(Process::new(name));
+            new_processes.push(Process::new(name, name));
         }
         let file = File::create(self.state.filename_processes())?;
         let writer = BufWriter::new(file);

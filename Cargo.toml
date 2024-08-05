@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 argh = "0.1.12"
+fork = "0.2.0"
 hex = "0.4.3"
 hmac = "0.12.1"
 ratatui = "0.27.0"
@@ -14,5 +15,6 @@ serde_json = "1.0.120"
 sha2 = "0.10.8"
 tabled = "0.15.0"
 thiserror = "1.0.62"
+tokio = { version = "1.39.2", features = ["rt"] }
 toml = "0.8.14"
 url = { version = "2.5.2", features = ["serde"] }

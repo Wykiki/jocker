@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use argh::FromArgs;
 use tabled::{settings::Style, Table, Tabled};
 
@@ -13,12 +15,15 @@ use crate::{
 pub struct PsArgs {
     #[argh(switch, short = 'a')]
     /// whether to show even non-running processes
-    all: bool,
+    pub all: bool,
+    #[argh(positional)]
+    /// filter process to act upon
+    pub processes: Vec<String>,
 }
 
 #[derive(Tabled)]
 #[tabled(rename_all = "UPPERCASE")]
-struct PsOutput {
+pub struct PsOutput {
     name: String,
     status: ProcessState,
     #[tabled(display_with = "tabled_display_option")]
@@ -36,22 +41,26 @@ impl From<Process> for PsOutput {
 }
 
 pub struct Ps {
-    _args: PsArgs,
-    state: State,
+    args: PsArgs,
+    state: Arc<State>,
 }
 
 impl Ps {
-    pub fn new(_args: PsArgs, state: State) -> Self {
-        Ps { _args, state }
+    pub fn new(args: PsArgs, state: Arc<State>) -> Self {
+        Ps { args, state }
+    }
+
+    pub fn run(&self) -> Result<Vec<PsOutput>> {
+        let mut bins = self.state.filter_processes(&self.args.processes)?;
+        bins.sort();
+        Ok(bins.into_iter().map(PsOutput::from).collect())
     }
 }
 
 impl Exec for Ps {
     fn exec(&self) -> Result<()> {
-        let mut bins = self.state.get_processes()?;
-        bins.sort();
-        let bins = bins.into_iter().map(PsOutput::from);
-        let mut table = Table::new(bins);
+        let ps = self.run()?;
+        let mut table = Table::new(ps);
         table.with(Style::blank());
         println!("{table}");
         Ok(())

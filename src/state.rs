@@ -1,15 +1,16 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env,
     fs::{create_dir_all, File},
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
+    sync::RwLock,
 };
 
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{Process, ROCKER},
+    common::{Process, ProcessState, ROCKER},
     error::{Error, InnerError, Result},
     export_info::SerializedPackage,
 };
@@ -21,6 +22,7 @@ pub struct State {
     _project_dir: PathBuf,
     filename_binaries: String,
     filename_processes: String,
+    file_lock: RwLock<()>,
 }
 
 impl State {
@@ -30,6 +32,7 @@ impl State {
             _project_dir: project_dir,
             filename_binaries,
             filename_processes,
+            file_lock: RwLock::new(()),
         })
     }
 
@@ -42,13 +45,22 @@ impl State {
     }
 
     pub fn get_binaries(&self) -> Result<Vec<SerializedPackage>> {
+        self.file_lock
+            .read()
+            .expect("Poisoned RwLock, cannot recover");
         let file = File::open(self.filename_binaries())
             .map_err(Error::with_context(InnerError::StateIo))?;
         let reader = BufReader::new(file);
         serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
     }
 
+    /// Filter processes list based on given process names
+    ///
+    /// If [`process_names`] is empty, returns all processes
     pub fn filter_processes(&self, process_names: &[String]) -> Result<Vec<Process>> {
+        if process_names.is_empty() {
+            return self.get_processes();
+        }
         let processes: Vec<Process> = self
             .get_processes()?
             .into_iter()
@@ -67,10 +79,38 @@ impl State {
     }
 
     pub fn get_processes(&self) -> Result<Vec<Process>> {
+        self.file_lock
+            .read()
+            .expect("Poisoned RwLock, cannot recover");
         let file = File::open(self.filename_processes())
             .map_err(Error::with_context(InnerError::StateIo))?;
         let reader = BufReader::new(file);
         serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
+    }
+
+    pub fn set_status(&self, process_name: &str, status: ProcessState) -> Result<()> {
+        let mut processes: HashMap<String, Process> = self
+            .get_processes()?
+            .into_iter()
+            .map(|process| (process_name.to_string(), process))
+            .collect();
+        processes
+            .get_mut(process_name)
+            .expect(&format!(
+                "Unable to find process {process_name} in state, this should not happen"
+            ))
+            .status = status;
+        let processes: Vec<&Process> = processes.values().collect();
+        self.file_lock
+            .write()
+            .expect("Poisoned RwLock, cannot recover");
+
+        let file = File::create(self.filename_binaries())?;
+        let writer = BufWriter::new(file);
+        serde_json::to_writer(writer, &processes)
+            .map_err(Error::with_context(InnerError::StateIo))?;
+
+        Ok(())
     }
 
     fn get_or_create_state_dir() -> Result<(PathBuf, String, String)> {
