@@ -20,16 +20,17 @@ use state::State;
 
 use crate::error::Result;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     if cfg!(target_os = "windows") {
         panic!("platform not supported: windows");
     }
     let cli: Cli = argh::from_env();
     let state = Arc::new(State::new()?);
     match cli.sub_command {
-        CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec(),
-        CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec(),
-        CliSubCommand::Start(args) => Start::new(args, state.clone()).exec(),
+        CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec().await,
+        CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec().await,
+        CliSubCommand::Start(args) => Start::new(args, state.clone()).exec().await,
         _ => panic!(),
     }
 }

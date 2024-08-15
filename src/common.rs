@@ -7,15 +7,15 @@ use crate::error::Result;
 pub const ROCKER: &str = "rocker";
 
 pub trait Exec {
-    fn exec(&self) -> Result<()>;
+    async fn exec(&self) -> Result<()>;
 }
 
-#[derive(Clone, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub struct Process {
     pub name: String,
     pub binary: String,
     pub status: ProcessState,
-    pub pid: Option<u32>,
+    pub pid: Option<i32>,
 }
 
 impl Process {
@@ -37,7 +37,7 @@ impl Process {
     }
 }
 
-#[derive(Clone, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub enum ProcessState {
     Stopped,
     Building,

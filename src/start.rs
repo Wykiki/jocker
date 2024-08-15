@@ -1,10 +1,11 @@
 use std::{
-    process::{Command, ExitStatus},
+    process::{exit, Command, Stdio},
     sync::Arc,
 };
 
 use argh::FromArgs;
-use fork::{daemon, Fork};
+use fork::{fork, Fork};
+use tokio::task::JoinSet;
 
 use crate::{
     common::{Exec, Process, ProcessState},
@@ -33,49 +34,96 @@ impl Start {
 }
 
 impl Exec for Start {
-    fn exec(&self) -> Result<()> {
+    async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
-        let mut handles = vec![];
+        let mut handles = JoinSet::new();
         for process in processes {
             let state = self.state.clone();
-            handles.push(tokio::spawn(run(state, process)));
+            handles.spawn(run(state, process));
         }
+
+        while (handles.join_next().await).is_some() {}
 
         Ok(())
     }
 }
 
-async fn run(state: Arc<State>, process: Process) {
-    let binary = process.binary();
+async fn run(state: Arc<State>, process: Process) -> Result<()> {
     if process.status != ProcessState::Stopped {
         println!("Process is already started: {}", process.name())
     }
-    if let Ok(Fork::Child) = daemon(false, false) {
-        let build = Command::new("cargo")
-            .arg("build")
-            .arg(format!("--package={binary}"))
-            .output()
-            .expect(&format!(
-                "Error while running cargo run for process {}",
-                process.name()
-            ));
-        state
-            .set_status(process.name(), ProcessState::Building)
-            .expect("Cannot recover from error");
-        if !build.status.success() {
-            panic!(
-                "Build for process {} produced exit code {}",
-                process.name(),
-                build.status
-            );
+    let process_name = process.name().to_string();
+    match fork() {
+        Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), child_pid)?,
+        Ok(Fork::Child) => {
+            state.log("Reached child").unwrap();
+            if let Err(err) = run_child(state.clone(), process).await {
+                state
+                    .log(err)
+                    .expect(&format!("Unable to log for process {}", process_name))
+            }
+            state.log("Exiting child").unwrap();
+            exit(0);
         }
-        Command::new("cargo")
-            .arg("build")
-            .arg(format!("--package={binary}"))
-            .output()
-            .expect(&format!(
-                "Error while running cargo run for process {}",
-                process.name()
-            ));
+        Err(e) => state.log(format!("Unable to fork: {e}"))?,
     }
+    Ok(())
+}
+
+async fn run_child(state: Arc<State>, process: Process) -> Result<()> {
+    let binary = process.binary();
+    state.set_status(process.name(), ProcessState::Building)?;
+    let mut build = Command::new("cargo")
+        .arg("build")
+        .arg(format!("--package={binary}"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(Error::with_context(InnerError::Start(
+            "Unable to launch build step".to_string(),
+        )))?;
+    if let Some(stdout) = build.stdout.take() {
+        state.log_process(&process, stdout)?;
+    } else {
+        state.log("Unable to take ownership of build stdout")?;
+    }
+    if let Some(stderr) = build.stderr.take() {
+        state.log_process(&process, stderr)?;
+    } else {
+        state.log("Unable to take ownership of build stderr")?;
+    }
+    let build = build.wait()?;
+    if !build.success() {
+        state.set_status(process.name(), ProcessState::Stopped)?;
+        return Err(Error::new(InnerError::Start(format!(
+            "Build for process {} produced exit code {}",
+            process.name(),
+            build
+        ))));
+    }
+
+    state.set_status(process.name(), ProcessState::Running)?;
+    let mut run = Command::new("cargo")
+        .arg("run")
+        .arg(format!("--package={binary}"))
+        .arg("ps")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(Error::with_context(InnerError::Start(
+            "Unable to run crate".to_string(),
+        )))?;
+    if let Some(stdout) = run.stdout.take() {
+        state.log_process(&process, stdout)?;
+    } else {
+        state.log("Unable to take ownership of run stdout")?;
+    }
+    if let Some(stderr) = run.stderr.take() {
+        state.log_process(&process, stderr)?;
+    } else {
+        state.log("Unable to take ownership of run stderr")?;
+    }
+    run.wait()?;
+    state.set_status(process.name(), ProcessState::Stopped)?;
+    Ok(())
 }

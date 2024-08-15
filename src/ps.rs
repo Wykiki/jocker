@@ -27,7 +27,7 @@ pub struct PsOutput {
     name: String,
     status: ProcessState,
     #[tabled(display_with = "tabled_display_option")]
-    pid: Option<u32>,
+    pid: Option<i32>,
 }
 
 impl From<Process> for PsOutput {
@@ -58,7 +58,7 @@ impl Ps {
 }
 
 impl Exec for Ps {
-    fn exec(&self) -> Result<()> {
+    async fn exec(&self) -> Result<()> {
         let ps = self.run()?;
         let mut table = Table::new(ps);
         table.with(Style::blank());

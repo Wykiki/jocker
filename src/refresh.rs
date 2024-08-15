@@ -110,7 +110,7 @@ impl Refresh {
 }
 
 impl Exec for Refresh {
-    fn exec(&self) -> Result<()> {
+    async fn exec(&self) -> Result<()> {
         self.refresh_binaries()?;
         self.refresh_processes()
     }

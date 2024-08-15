@@ -69,6 +69,8 @@ pub enum InnerError {
     Filesystem,
     #[error("Process not found error")]
     ProcessNotFound(Vec<String>),
+    #[error("Start stage error")]
+    Start(String),
     #[error("State IO error")]
     StateIo,
 
