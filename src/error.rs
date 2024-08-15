@@ -76,8 +76,10 @@ pub enum InnerError {
 
     #[error("IO error")]
     Io(#[from] std::io::Error),
-    #[error("Var error")]
-    Var(#[from] std::env::VarError),
+    #[error("Notify error")]
+    Notify(#[from] notify::Error),
     #[error("Serde JSON error")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Var error")]
+    Var(#[from] std::env::VarError),
 }

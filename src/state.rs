@@ -4,7 +4,7 @@ use std::{
     fmt::Display,
     fs::{create_dir_all, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::RwLock,
 };
 

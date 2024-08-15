@@ -2,6 +2,7 @@ mod cli;
 mod common;
 mod error;
 mod export_info;
+mod logs;
 mod ps;
 mod refresh;
 mod start;
@@ -13,6 +14,7 @@ use std::sync::Arc;
 
 use cli::{Cli, CliSubCommand};
 use common::Exec;
+use logs::Logs;
 use ps::Ps;
 use refresh::Refresh;
 use start::Start;
@@ -28,6 +30,7 @@ async fn main() -> Result<()> {
     let cli: Cli = argh::from_env();
     let state = Arc::new(State::new()?);
     match cli.sub_command {
+        CliSubCommand::Logs(args) => Logs::new(args, state.clone()).exec().await,
         CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec().await,
         CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec().await,
         CliSubCommand::Start(args) => Start::new(args, state.clone()).exec().await,
