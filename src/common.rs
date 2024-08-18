@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Error, InnerError, Result};
 
 pub const ROCKER: &str = "rocker";
 
@@ -37,6 +37,19 @@ impl Process {
     }
 }
 
+impl TryFrom<ProcessSql> for Process {
+    type Error = Error;
+
+    fn try_from(value: ProcessSql) -> std::prelude::v1::Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name,
+            binary: value.binary,
+            status: value.status.try_into()?,
+            pid: value.pid,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub enum ProcessState {
     Stopped,
@@ -55,6 +68,27 @@ impl Display for ProcessState {
         };
         write!(f, "{str}")
     }
+}
+
+impl TryFrom<String> for ProcessState {
+    type Error = Error;
+
+    fn try_from(value: String) -> std::prelude::v1::Result<Self, Self::Error> {
+        Ok(match value.as_str() {
+            "stopped" => Self::Stopped,
+            "building" => Self::Building,
+            "running" => Self::Running,
+            "healthy" => Self::Healthy,
+            _ => Err(Error::new(InnerError::Parse(value)))?,
+        })
+    }
+}
+
+pub struct ProcessSql {
+    pub name: String,
+    pub binary: String,
+    pub status: String,
+    pub pid: Option<i32>,
 }
 
 pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {

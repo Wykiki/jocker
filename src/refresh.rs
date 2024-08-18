@@ -5,7 +5,7 @@ use argh::FromArgs;
 use crate::{
     common::{Exec, Process},
     error::{Error, InnerError, Result},
-    export_info::{ExportInfoMinimal, SerializedPackage, TargetKind},
+    export_info::{BinaryPackage, ExportInfoMinimal, SerializedPackage, TargetKind},
     state::State,
 };
 
@@ -68,7 +68,7 @@ impl Refresh {
 
     fn refresh_processes(&self) -> Result<()> {
         let binaries = self.state.get_binaries()?;
-        let binaries_names: Vec<&str> = binaries.iter().map(SerializedPackage::name).collect();
+        let binaries_names: Vec<&str> = binaries.iter().map(BinaryPackage::name).collect();
         let processes = self.state.get_processes()?;
         let processes_names: Vec<&str> = processes.iter().map(Process::name).collect();
         let new_binaries_names = Self::keep_unique(binaries_names, processes_names);

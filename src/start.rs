@@ -37,6 +37,7 @@ impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
         let mut handles = JoinSet::new();
+        dbg!(&processes);
         for process in processes {
             let state = self.state.clone();
             handles.spawn(run(state, process));
@@ -60,7 +61,7 @@ async fn run(state: Arc<State>, process: Process) -> Result<()> {
             if let Err(err) = run_child(state.clone(), process).await {
                 state
                     .log(err)
-                    .expect(&format!("Unable to log for process {}", process_name))
+                    .unwrap_or_else(|e| panic!("Unable to log for process {}: {e}", process_name))
             }
             state.log("Exiting child").unwrap();
             exit(0);

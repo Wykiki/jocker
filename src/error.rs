@@ -67,6 +67,10 @@ pub enum InnerError {
     Env(String),
     #[error("Filesystem error")]
     Filesystem,
+    #[error("Lock error")]
+    Lock(String),
+    #[error("Parse error")]
+    Parse(String),
     #[error("Process not found error")]
     ProcessNotFound(Vec<String>),
     #[error("Start stage error")]
@@ -80,6 +84,10 @@ pub enum InnerError {
     Notify(#[from] notify::Error),
     #[error("Serde JSON error")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Sqlite error")]
+    Sqlite(#[from] rusqlite::Error),
+    #[error("URL error")]
+    Url(#[from] url::ParseError),
     #[error("Var error")]
     Var(#[from] std::env::VarError),
 }

@@ -1,52 +1,70 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     env,
     fmt::Display,
     fs::{create_dir_all, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Read, Write},
     path::Path,
-    sync::RwLock,
+    sync::{Arc, Mutex, RwLock},
 };
 
 use chrono::Utc;
+use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{Process, ProcessState, ROCKER},
+    common::{Process, ProcessSql, ProcessState, ROCKER},
     error::{Error, InnerError, Result},
-    export_info::SerializedPackage,
+    export_info::{BinaryPackage, BinaryPackageSql, SerializedPackage},
 };
 
-const BINARIES_FILE: &str = "binaries.json";
+const DB_FILE: &str = "db.sqlite3";
+const BINARIES_TABLE_NAME: &str = "binary";
+const BINARIES_TABLE_INIT_SQL: &str = r#"
+    CREATE TABLE binary (
+        name TEXT PRIMARY KEY,
+        id TEXT NOT NULL
+    )
+"#;
 const LOGS_FILE: &str = "logs.txt";
 const LOG_PROCESS_PREFIX: &str = "log_";
 const LOG_PROCESS_SUFFIX: &str = ".txt";
-const PROCESSES_FILE: &str = "processes.json";
+const PROCESSES_TABLE_NAME: &str = "process";
+const PROCESSES_TABLE_INIT_SQL: &str = r#"
+    CREATE TABLE process (
+        name TEXT PRIMARY KEY,
+        binary_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        pid INTEGER
+    )
+"#;
 
 pub struct State {
     _project_dir: String,
-    filename_binaries: String,
+    // filename_binaries: String,
     filename_logs: String,
-    filename_processes: String,
+    // filename_processes: String,
     file_lock: RwLock<()>,
+    db: Arc<Mutex<Connection>>,
 }
 
 impl State {
     pub fn new() -> Result<Self> {
-        let (project_dir, filename_binaries, filename_logs, filename_processes) =
-            Self::get_or_create_state_dir()?;
+        let (project_dir, filename_logs, db_connection) = Self::get_or_create_state_dir()?;
         Ok(Self {
             _project_dir: project_dir,
-            filename_binaries,
+            // filename_binaries: filename_binaries.clone(),
             filename_logs,
-            filename_processes,
+            // filename_processes: filename_processes.clone(),
             file_lock: RwLock::new(()),
+            db: Arc::new(Mutex::new(db_connection)),
+            // processes_db: Arc::new(Mutex::new(Connection::open(filename_processes)?)),
         })
     }
 
-    pub fn filename_binaries(&self) -> &str {
-        &self.filename_binaries
-    }
+    // pub fn filename_binaries(&self) -> &str {
+    //     &self.filename_binaries
+    // }
 
     pub fn filename_logs(&self) -> &str {
         &self.filename_logs
@@ -58,19 +76,36 @@ impl State {
         format!("{project_dir}/{LOG_PROCESS_PREFIX}{process_name}{LOG_PROCESS_SUFFIX}")
     }
 
-    pub fn filename_processes(&self) -> &str {
-        &self.filename_processes
-    }
+    // pub fn filename_processes(&self) -> &str {
+    //     &self.filename_processes
+    // }
 
-    #[allow(unused_must_use)]
-    pub fn get_binaries(&self) -> Result<Vec<SerializedPackage>> {
-        self.file_lock
-            .read()
-            .expect("Poisoned RwLock, cannot recover");
-        let file = File::open(self.filename_binaries())
-            .map_err(Error::with_context(InnerError::StateIo))?;
-        let reader = BufReader::new(file);
-        serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
+    pub fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let mut stmt = db.prepare(
+            r#"
+                SELECT name, id
+                FROM binary
+            "#,
+        )?;
+        let bins_iter = stmt.query_map([], |row| {
+            Ok(BinaryPackageSql {
+                name: row.get(0)?,
+                id: row.get(1)?,
+            })
+        })?;
+        let mut binaries = vec![];
+        for bin in bins_iter {
+            binaries.push(bin?.try_into()?);
+        }
+        Ok(binaries)
+        // let file = File::open(self.filename_binaries())
+        //     .map_err(Error::with_context(InnerError::StateIo))?;
+        // let reader = BufReader::new(file);
+        // serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
     }
 
     /// Filter processes list based on given process names
@@ -96,79 +131,71 @@ impl State {
         }
         Ok(processes)
     }
-    #[allow(unused_must_use)]
+
     pub fn get_processes(&self) -> Result<Vec<Process>> {
-        self.file_lock
-            .read()
-            .expect("Poisoned RwLock, cannot recover");
-        let file = File::open(self.filename_processes())
-            .map_err(Error::with_context(InnerError::StateIo))?;
-        let reader = BufReader::new(file);
-        serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
-    }
-
-    #[allow(unused_must_use)]
-    pub fn set_status(&self, process_name: &str, status: ProcessState) -> Result<()> {
-        self.file_lock
-            .write()
-            .expect("Poisoned RwLock, cannot recover");
-        let mut processes: HashMap<String, Process> = self
-            .get_processes()?
-            .into_iter()
-            .map(|process| (process_name.to_string(), process))
-            .collect();
-        if let Some(process) = processes.get_mut(process_name) {
-            process.status = status;
-        } else {
-            return Err(Error::new(InnerError::StateIo));
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let mut stmt = db.prepare(
+            r#"
+                SELECT name, binary, status, pid
+                FROM process
+            "#,
+        )?;
+        let procs_iter = stmt.query_map([], |row| {
+            Ok(ProcessSql {
+                name: row.get(0)?,
+                binary: row.get(1)?,
+                status: row.get(2)?,
+                pid: row.get(3)?,
+            })
+        })?;
+        let mut processes = vec![];
+        for proc in procs_iter {
+            processes.push(proc?.try_into()?);
         }
-        let processes: Vec<&Process> = processes.values().collect();
+        Ok(processes)
+    }
 
-        let file = File::create(self.filename_processes())?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &processes)
-            .map_err(Error::with_context(InnerError::StateIo))?;
-
+    pub fn set_status(&self, process_name: &str, status: ProcessState) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        db.execute(
+            r#"
+                UPDATE process
+                SET status = ?2
+                WHERE name = ?1
+            "#,
+            (process_name, status.to_string().as_str()),
+        )?;
         Ok(())
     }
 
-    #[allow(unused_must_use)]
     pub fn set_pid(&self, process_name: &str, pid: i32) -> Result<()> {
-        dbg!(pid);
-        self.file_lock
-            .write()
-            .expect("Poisoned RwLock, cannot recover");
-        let mut processes: HashMap<String, Process> = self
-            .get_processes()?
-            .into_iter()
-            .map(|process| (process_name.to_string(), process))
-            .collect();
-        processes
-            .get_mut(process_name)
-            .expect(&format!(
-                "Unable to find process {process_name} in state, this should not happen"
-            ))
-            .pid = Some(pid);
-        dbg!("1");
-        let processes: Vec<&Process> = processes.values().collect();
-        // dbg!(&processes);
-
-        dbg!(&processes);
-        let file = File::create(self.filename_processes())?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &processes)
-            .map_err(Error::with_context(InnerError::StateIo))?;
-        dbg!("3");
-
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        db.execute(
+            r#"
+                UPDATE process
+                SET pid = ?2
+                WHERE name = ?1
+            "#,
+            (process_name, pid),
+        )?;
         Ok(())
     }
 
-    #[allow(unused_must_use)]
     pub fn log<T>(&self, content: T) -> Result<()>
     where
         T: Display,
     {
-        self.file_lock
+        let _lock = self
+            .file_lock
             .write()
             .expect("Poisoned RwLock, cannot recover");
 
@@ -182,12 +209,12 @@ impl State {
         Ok(())
     }
 
-    #[allow(unused_must_use)]
     pub fn log_process<T>(&self, process: &Process, content: T) -> Result<()>
     where
         T: Read,
     {
-        self.file_lock
+        let _lock = self
+            .file_lock
             .write()
             .expect("Poisoned RwLock, cannot recover");
 
@@ -199,7 +226,6 @@ impl State {
             .map_err(Error::with_context(InnerError::Filesystem))?;
         let mut buf = BufReader::new(content);
         loop {
-            self.log("Log loop")?;
             let bytes = match buf.fill_buf() {
                 Ok(buf) => {
                     file.write_all(buf).expect("Couldn't write");
@@ -220,7 +246,18 @@ impl State {
         Ok(())
     }
 
-    fn get_or_create_state_dir() -> Result<(String, String, String, String)> {
+    fn get_or_create_state_dir() -> Result<(String, String, Connection)> {
+        let project_dir = Self::get_or_create_project_dir()?;
+
+        Ok((
+            project_dir.clone(),
+            Self::get_or_create_state_file(&project_dir, LOGS_FILE)?,
+            Self::get_or_create_database(&project_dir, DB_FILE)?,
+            // Self::get_or_create_database(&project_dir, PROCESSES_DB_FILE, PROCESSES_TABLE_NAME)?,
+        ))
+    }
+
+    fn get_or_create_project_dir() -> Result<String> {
         let pwd =
             env::var("PWD").map_err(|e| Error::with_context(InnerError::Env(e.to_string()))(e))?;
 
@@ -239,13 +276,7 @@ impl State {
             create_dir_all(project_dir_path)
                 .map_err(Error::with_context(InnerError::Filesystem))?;
         }
-
-        Ok((
-            project_dir.clone(),
-            Self::get_or_create_state_file(&project_dir, BINARIES_FILE)?,
-            Self::get_or_create_state_file(&project_dir, LOGS_FILE)?,
-            Self::get_or_create_state_file(&project_dir, PROCESSES_FILE)?,
-        ))
+        Ok(project_dir)
     }
 
     fn get_or_create_state_file(project_dir: &str, filename: &str) -> Result<String> {
@@ -259,5 +290,27 @@ impl State {
                 .map_err(Error::with_context(InnerError::StateIo))?;
         }
         Ok(file)
+    }
+
+    fn get_or_create_database(project_dir: &str, filename: &str) -> Result<Connection> {
+        let database_file = Self::get_or_create_state_file(project_dir, filename)?;
+        let conn = Connection::open(database_file)?;
+        Self::init_db(&conn, BINARIES_TABLE_NAME, BINARIES_TABLE_INIT_SQL)?;
+        Self::init_db(&conn, PROCESSES_TABLE_NAME, PROCESSES_TABLE_INIT_SQL)?;
+        Ok(conn)
+    }
+
+    fn init_db(conn: &Connection, table_name: &str, init_query: &str) -> Result<()> {
+        let table_exists = conn.query_row(
+            r#"
+                SELECT COUNT(name) FROM sqlite_master WHERE type='table' AND name = '$1';
+            "#,
+            [table_name],
+            |row| row.get(0).map(|count: i32| count == 1),
+        )?;
+        if !table_exists {
+            conn.execute(init_query, ())?;
+        }
+        Ok(())
     }
 }
