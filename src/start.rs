@@ -37,7 +37,6 @@ impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
         let mut handles = JoinSet::new();
-        dbg!(&processes);
         for process in processes {
             let state = self.state.clone();
             handles.spawn(run(state, process));
@@ -51,19 +50,18 @@ impl Exec for Start {
 
 async fn run(state: Arc<State>, process: Process) -> Result<()> {
     if process.status != ProcessState::Stopped {
-        println!("Process is already started: {}", process.name())
+        println!("Process is already started: {}", process.name());
+        return Ok(());
     }
     let process_name = process.name().to_string();
     match fork() {
         Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), child_pid)?,
         Ok(Fork::Child) => {
-            state.log("Reached child").unwrap();
             if let Err(err) = run_child(state.clone(), process).await {
                 state
                     .log(err)
                     .unwrap_or_else(|e| panic!("Unable to log for process {}: {e}", process_name))
             }
-            state.log("Exiting child").unwrap();
             exit(0);
         }
         Err(e) => state.log(format!("Unable to fork: {e}"))?,
