@@ -100,7 +100,7 @@ async fn run(state: Arc<State>, process: Process, args: LogsArgs) -> Result<()> 
 
                 let reader = BufReader::new(&f);
                 for line in reader.lines() {
-                    println!("> {:?}", line.unwrap());
+                    println!("{process_prefix}{}", line.unwrap());
                 }
             }
             Err(error) => println!("{error:?}"),
