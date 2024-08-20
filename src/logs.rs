@@ -8,7 +8,7 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::task::JoinSet;
 
 use crate::{
-    common::{Exec, Process},
+    common::{Exec, Process, ProcessState},
     error::Result,
     state::State,
 };
@@ -88,7 +88,7 @@ async fn run(
         }
     }
 
-    if !args.follow {
+    if !args.follow || process.status == ProcessState::Stopped {
         return Ok(());
     }
 
