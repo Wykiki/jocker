@@ -75,8 +75,6 @@ pub enum InnerError {
     ProcessNotFound(Vec<String>),
     #[error("Start stage error")]
     Start(String),
-    #[error("State IO error")]
-    StateIo,
 
     #[error("IO error")]
     Io(#[from] std::io::Error),

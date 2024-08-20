@@ -3,7 +3,7 @@ use std::{
     env,
     fmt::Display,
     fs::{create_dir_all, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     common::{Process, ProcessSql, ProcessState, ROCKER},
     error::{Error, InnerError, Result},
-    export_info::{BinaryPackage, BinaryPackageSql, SerializedPackage},
+    export_info::{BinaryPackage, BinaryPackageSql},
 };
 
 const DB_FILE: &str = "db.sqlite3";
@@ -33,7 +33,7 @@ const PROCESSES_TABLE_NAME: &str = "process";
 const PROCESSES_TABLE_INIT_SQL: &str = r#"
     CREATE TABLE process (
         name TEXT PRIMARY KEY,
-        binary_name TEXT NOT NULL,
+        binary TEXT NOT NULL,
         status TEXT NOT NULL,
         pid INTEGER
     )
@@ -108,6 +108,34 @@ impl State {
         // serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
     }
 
+    pub fn set_binaries(&self, binaries: Vec<BinaryPackage>) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+
+        db.execute(
+            &format!(
+                r#"
+                    DELETE FROM {BINARIES_TABLE_NAME}
+                "#
+            ),
+            [],
+        )?;
+        for bin in binaries {
+            db.execute(
+                &format!(
+                    r#"
+                        INSERT INTO {BINARIES_TABLE_NAME} (name, id)
+                        VALUES ($1, $2)
+                    "#
+                ),
+                (bin.name, bin.id.to_string()),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Filter processes list based on given process names
     ///
     /// If [`process_names`] is empty, returns all processes
@@ -156,6 +184,34 @@ impl State {
             processes.push(proc?.try_into()?);
         }
         Ok(processes)
+    }
+
+    pub fn set_processes(&self, processes: Vec<Process>) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+
+        db.execute(
+            &format!(
+                r#"
+                DELETE FROM {PROCESSES_TABLE_NAME}
+            "#
+            ),
+            [],
+        )?;
+        for proc in processes {
+            db.execute(
+                &format!(
+                    r#"
+                    INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid)
+                    VALUES ($1, $2, $3, $4)
+                "#
+                ),
+                (proc.name, proc.binary, proc.status.to_string(), proc.pid),
+            )?;
+        }
+        Ok(())
     }
 
     pub fn set_status(&self, process_name: &str, status: ProcessState) -> Result<()> {
@@ -283,11 +339,7 @@ impl State {
         let file = format!("{project_dir}/{filename}");
         let file_path = Path::new(&file);
         if !file_path.exists() {
-            let file =
-                File::create_new(file_path).map_err(Error::with_context(InnerError::Filesystem))?;
-            let writer = BufWriter::new(file);
-            serde_json::to_writer(writer, &vec![] as &Vec<SerializedPackage>)
-                .map_err(Error::with_context(InnerError::StateIo))?;
+            File::create_new(file_path).map_err(Error::with_context(InnerError::Filesystem))?;
         }
         Ok(file)
     }
@@ -303,7 +355,7 @@ impl State {
     fn init_db(conn: &Connection, table_name: &str, init_query: &str) -> Result<()> {
         let table_exists = conn.query_row(
             r#"
-                SELECT COUNT(name) FROM sqlite_master WHERE type='table' AND name = '$1';
+                SELECT COUNT(name) FROM sqlite_master WHERE type='table' AND name = $1;
             "#,
             [table_name],
             |row| row.get(0).map(|count: i32| count == 1),

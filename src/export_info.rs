@@ -49,6 +49,15 @@ impl BinaryPackage {
     }
 }
 
+impl From<SerializedPackage> for BinaryPackage {
+    fn from(value: SerializedPackage) -> Self {
+        Self {
+            name: value.name,
+            id: value.id,
+        }
+    }
+}
+
 impl TryFrom<BinaryPackageSql> for BinaryPackage {
     type Error = Error;
 

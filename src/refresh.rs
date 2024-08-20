@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, hash::Hash, io::BufWriter, process::Command, sync::Arc};
+use std::{collections::HashMap, hash::Hash, process::Command, sync::Arc};
 
 use argh::FromArgs;
 
@@ -55,14 +55,12 @@ impl Refresh {
     }
 
     fn refresh_binaries(&self) -> Result<()> {
-        let binaries = Self::fetch_bins()?;
+        let binaries: Vec<BinaryPackage> =
+            Self::fetch_bins()?.into_iter().map(Into::into).collect();
+        let binaries_len = binaries.len();
+        self.state.set_binaries(binaries)?;
 
-        let file = File::create(self.state.filename_binaries())?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &binaries)
-            .map_err(Error::with_context(InnerError::StateIo))?;
-
-        println!("Total binaries: {}", binaries.len());
+        println!("Total binaries: {}", binaries_len);
         Ok(())
     }
 
@@ -77,12 +75,10 @@ impl Refresh {
         for name in &new_binaries_names {
             new_processes.push(Process::new(name, name));
         }
-        let file = File::create(self.state.filename_processes())?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &new_processes)
-            .map_err(Error::with_context(InnerError::StateIo))?;
+        let new_processes_len = new_processes.len();
+        self.state.set_processes(new_processes)?;
 
-        println!("Total processes: {}", new_processes.len());
+        println!("Total processes: {}", new_processes_len);
         if !new_binaries_names.is_empty() {
             println!(
                 "Added {} new binaries to the processes list",
