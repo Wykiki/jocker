@@ -9,7 +9,7 @@ use crate::{
     state::State,
 };
 
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Debug, FromArgs, PartialEq)]
 /// Refresh the list of project's binaries
 #[argh(subcommand, name = "refresh")]
 pub struct RefreshArgs {}

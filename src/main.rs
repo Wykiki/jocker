@@ -19,6 +19,7 @@ use ps::Ps;
 use refresh::Refresh;
 use start::Start;
 use state::State;
+use stop::Stop;
 
 use crate::error::Result;
 
@@ -34,6 +35,7 @@ async fn main() -> Result<()> {
         CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec().await,
         CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec().await,
         CliSubCommand::Start(args) => Start::new(args, state.clone()).exec().await,
+        CliSubCommand::Stop(args) => Stop::new(args, state.clone()).exec().await,
         _ => panic!(),
     }
 }

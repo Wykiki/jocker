@@ -13,7 +13,7 @@ use crate::{
     state::State,
 };
 
-#[derive(Clone, FromArgs, PartialEq, Debug)]
+#[derive(Clone, Debug, FromArgs, PartialEq)]
 /// Start processes
 #[argh(subcommand, name = "logs")]
 pub struct LogsArgs {

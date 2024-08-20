@@ -9,7 +9,7 @@ use crate::{
     state::State,
 };
 
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Debug, FromArgs, PartialEq)]
 /// List processes
 #[argh(subcommand, name = "ps")]
 pub struct PsArgs {

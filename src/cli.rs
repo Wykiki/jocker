@@ -1,6 +1,6 @@
 use argh::FromArgs;
 
-use crate::{logs::LogsArgs, ps::PsArgs, refresh::RefreshArgs, start::StartArgs};
+use crate::{logs::LogsArgs, ps::PsArgs, refresh::RefreshArgs, start::StartArgs, stop::StopArgs};
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Top-level command.
@@ -17,6 +17,7 @@ pub enum CliSubCommand {
     Ps(PsArgs),
     Refresh(RefreshArgs),
     Start(StartArgs),
+    Stop(StopArgs),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]

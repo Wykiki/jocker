@@ -230,7 +230,7 @@ impl State {
         Ok(())
     }
 
-    pub fn set_pid(&self, process_name: &str, pid: i32) -> Result<()> {
+    pub fn set_pid(&self, process_name: &str, pid: Option<i32>) -> Result<()> {
         let db = self
             .db
             .lock()

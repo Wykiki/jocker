@@ -13,7 +13,7 @@ use crate::{
     state::State,
 };
 
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Debug, FromArgs, PartialEq)]
 /// Start processes
 #[argh(subcommand, name = "start")]
 pub struct StartArgs {
@@ -55,7 +55,7 @@ async fn run(state: Arc<State>, process: Process) -> Result<()> {
     }
     let process_name = process.name().to_string();
     match fork() {
-        Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), child_pid)?,
+        Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), Some(child_pid))?,
         Ok(Fork::Child) => {
             if let Err(err) = run_child(state.clone(), process).await {
                 state
