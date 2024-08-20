@@ -23,8 +23,11 @@ pub struct LogsArgs {
     /// prepend each line with its process name
     #[argh(switch, short = 'p')]
     process_prefix: bool,
-    #[argh(positional)]
+    /// only show new log entries
+    #[argh(switch, short = 't')]
+    tail: bool,
     /// filter process to act upon
+    #[argh(positional)]
     processes: Vec<String>,
 }
 
@@ -43,9 +46,16 @@ impl Exec for Logs {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
         let mut handles = JoinSet::new();
+        let max_process_name_len = processes.iter().fold(0, |acc, e| {
+            if acc < e.name().len() {
+                e.name().len()
+            } else {
+                acc
+            }
+        });
         for process in processes {
             let state = self.state.clone();
-            handles.spawn(run(state, process, self.args.clone()));
+            handles.spawn(run(state, process, self.args.clone(), max_process_name_len));
         }
 
         while (handles.join_next().await).is_some() {}
@@ -54,7 +64,12 @@ impl Exec for Logs {
     }
 }
 
-async fn run(state: Arc<State>, process: Process, args: LogsArgs) -> Result<()> {
+async fn run(
+    state: Arc<State>,
+    process: Process,
+    args: LogsArgs,
+    max_process_name_len: usize,
+) -> Result<()> {
     let process_name = process.name();
     // get file
     let path = state.filename_log_process(&process);
@@ -63,13 +78,16 @@ async fn run(state: Arc<State>, process: Process, args: LogsArgs) -> Result<()> 
     let f = std::fs::File::open(&path)?;
     let reader = BufReader::new(f);
     let process_prefix = if args.process_prefix {
-        format!("{process_name} > ")
+        format!("{process_name:max_process_name_len$} > ")
     } else {
         "".to_string()
     };
-    for line in reader.lines() {
-        println!("{process_prefix}{}", line.unwrap_or("".to_string()));
+    if !args.tail {
+        for line in reader.lines() {
+            println!("{process_prefix}{}", line.unwrap_or("".to_string()));
+        }
     }
+
     if !args.follow {
         return Ok(());
     }
