@@ -59,7 +59,7 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
         println!("Process does not have a pid: {process_name}");
         return Ok(());
     };
-    println!("Stopping process {process_name}...");
+    println!("Stopping process {process_name} ...");
     let mut kill = Command::new("kill");
     kill.arg("-s");
     if args.kill {

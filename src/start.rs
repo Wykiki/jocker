@@ -5,7 +5,6 @@ use std::{
 
 use argh::FromArgs;
 use fork::{fork, Fork};
-use tokio::task::JoinSet;
 
 use crate::{
     common::{Exec, Process, ProcessState},
@@ -36,40 +35,45 @@ impl Start {
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
-        let mut handles = JoinSet::new();
         for process in processes {
             let state = self.state.clone();
-            handles.spawn(run(state, process));
+            let process_name = process.name().to_string();
+            if let Err(e) = run(state, process) {
+                println!("Error while starting process {process_name}: {e}")
+            }
         }
-
-        while (handles.join_next().await).is_some() {}
 
         Ok(())
     }
 }
 
-async fn run(state: Arc<State>, process: Process) -> Result<()> {
+fn run(state: Arc<State>, process: Process) -> Result<()> {
     if process.status != ProcessState::Stopped {
         println!("Process is already started: {}", process.name());
         return Ok(());
     }
     let process_name = process.name().to_string();
+    println!("Starting process {process_name} ...");
     match fork() {
         Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), Some(child_pid))?,
         Ok(Fork::Child) => {
-            if let Err(err) = run_child(state.clone(), process).await {
+            state.log("Start child")?;
+            if let Err(err) = run_child(state.clone(), process) {
+                state.log("Child in error")?;
                 state
                     .log(err)
                     .unwrap_or_else(|e| panic!("Unable to log for process {}: {e}", process_name))
             }
+            state.log("End child")?;
             exit(0);
         }
         Err(e) => state.log(format!("Unable to fork: {e}"))?,
     }
+    println!("Process {process_name} started");
     Ok(())
 }
 
-async fn run_child(state: Arc<State>, process: Process) -> Result<()> {
+fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     let binary = process.binary();
     state.set_status(process.name(), ProcessState::Building)?;
     let mut build = Command::new("cargo")
