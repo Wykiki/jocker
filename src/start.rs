@@ -4,6 +4,7 @@ use std::{
 };
 
 use argh::FromArgs;
+use dotenvy::dotenv_iter;
 use fork::{fork, Fork};
 
 use crate::{
@@ -106,15 +107,20 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     }
 
     state.set_status(process.name(), ProcessState::Running)?;
-    let mut run = Command::new("cargo")
-        .arg("run")
+
+    let mut run = Command::new("cargo");
+    run.arg("run")
         .arg(format!("--package={binary}"))
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(Error::with_context(InnerError::Start(
-            "Unable to run crate".to_string(),
-        )))?;
+        .stderr(Stdio::piped());
+    if let Ok(dotenv) = dotenv_iter() {
+        for (key, val) in dotenv.flatten() {
+            run.env(key, val);
+        }
+    }
+    let mut run = run.spawn().map_err(Error::with_context(InnerError::Start(
+        "Unable to run crate".to_string(),
+    )))?;
     if let Some(stdout) = run.stdout.take() {
         state.log_process(&process, stdout)?;
     } else {

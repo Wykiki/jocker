@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 argh = "0.1.12"
 chrono = "0.4.38"
+dotenvy = "0.15.7"
 fork = "0.2.0"
 hex = "0.4.3"
 hmac = "0.12.1"
