@@ -82,6 +82,8 @@ pub enum InnerError {
     Notify(#[from] notify::Error),
     #[error("Serde JSON error")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Serde YAML error")]
+    SerdeYaml(#[from] serde_yml::Error),
     #[error("Sqlite error")]
     Sqlite(#[from] rusqlite::Error),
     #[error("URL error")]

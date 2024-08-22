@@ -8,7 +8,7 @@ use dotenvy::dotenv_iter;
 use fork::{fork, Fork};
 
 use crate::{
-    common::{Exec, Process, ProcessState},
+    common::{ConfigFile, Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
     state::State,
 };
@@ -36,6 +36,18 @@ impl Start {
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
+        let rocker_config = ConfigFile::load()?;
+        let processes: Vec<Process> = processes
+            .into_iter()
+            .map(|mut p| {
+                p.args = rocker_config
+                    .processes
+                    .get(p.name())
+                    .map(|cp| cp.args.clone())
+                    .unwrap_or_default();
+                p
+            })
+            .collect();
         for process in processes {
             let state = self.state.clone();
             let process_name = process.name().to_string();
@@ -109,10 +121,14 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     state.set_status(process.name(), ProcessState::Running)?;
 
     let mut run = Command::new("cargo");
-    run.arg("run")
+    run.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .arg("run")
         .arg(format!("--package={binary}"))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .arg("--");
+    for arg in process.args() {
+        run.arg(arg);
+    }
     if let Ok(dotenv) = dotenv_iter() {
         for (key, val) in dotenv.flatten() {
             run.env(key, val);
