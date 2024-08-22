@@ -109,7 +109,6 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     let mut run = Command::new("cargo")
         .arg("run")
         .arg(format!("--package={binary}"))
-        .arg("ps")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
