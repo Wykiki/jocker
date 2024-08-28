@@ -40,11 +40,10 @@ impl Exec for Start {
         let processes: Vec<Process> = processes
             .into_iter()
             .map(|mut p| {
-                p.args = rocker_config
-                    .processes
-                    .get(p.name())
-                    .map(|cp| cp.args.clone())
-                    .unwrap_or_default();
+                if let Some(process_config) = rocker_config.processes.get(p.name()) {
+                    p.args.clone_from(&process_config.args);
+                    p.env.clone_from(&process_config.env);
+                }
                 p
             })
             .collect();
@@ -133,6 +132,9 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
         for (key, val) in dotenv.flatten() {
             run.env(key, val);
         }
+    }
+    for (key, val) in process.env.iter() {
+        run.env(key, val);
     }
     let mut run = run.spawn().map_err(Error::with_context(InnerError::Start(
         "Unable to run crate".to_string(),

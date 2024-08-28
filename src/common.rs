@@ -10,13 +10,14 @@ pub trait Exec {
     async fn exec(&self) -> Result<()>;
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Process {
     pub name: String,
     pub binary: String,
     pub status: ProcessState,
     pub pid: Option<i32>,
     pub args: Vec<String>,
+    pub env: HashMap<String, String>,
 }
 
 impl Process {
@@ -27,6 +28,7 @@ impl Process {
             status: ProcessState::Stopped,
             pid: None,
             args: Vec::new(),
+            env: HashMap::new(),
         }
     }
 
@@ -43,6 +45,34 @@ impl Process {
     }
 }
 
+impl Ord for Process {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.name.cmp(&other.name) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        match self.binary.cmp(&other.binary) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        match self.status.cmp(&other.status) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        match self.pid.cmp(&other.pid) {
+            core::cmp::Ordering::Equal => {}
+            ord => return ord,
+        }
+        self.args.cmp(&other.args)
+    }
+}
+
+impl PartialOrd for Process {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl TryFrom<ProcessSql> for Process {
     type Error = Error;
 
@@ -53,6 +83,7 @@ impl TryFrom<ProcessSql> for Process {
             status: value.status.try_into()?,
             pid: value.pid,
             args: Vec::new(),
+            env: HashMap::new(),
         })
     }
 }
@@ -121,8 +152,9 @@ impl ConfigFile {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct ConfigProcess {
     pub binary: Option<String>,
     pub args: Vec<String>,
+    pub env: HashMap<String, String>,
 }
