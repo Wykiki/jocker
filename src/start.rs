@@ -35,7 +35,6 @@ impl Start {
 
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
-        self.state.refresh()?;
         let processes = self.state.filter_processes(&self.args.processes)?;
         let processes = if let Some(rocker_config) = ConfigFile::load()? {
             processes

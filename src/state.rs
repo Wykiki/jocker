@@ -52,7 +52,7 @@ pub struct State {
 impl State {
     pub fn new() -> Result<Self> {
         let (project_dir, filename_logs, db_connection) = Self::get_or_create_state_dir()?;
-        Ok(Self {
+        let state = Self {
             _project_dir: project_dir,
             // filename_binaries: filename_binaries.clone(),
             filename_logs,
@@ -60,7 +60,9 @@ impl State {
             file_lock: RwLock::new(()),
             db: Arc::new(Mutex::new(db_connection)),
             // processes_db: Arc::new(Mutex::new(Connection::open(filename_processes)?)),
-        })
+        };
+        state.refresh()?;
+        Ok(state)
     }
 
     // pub fn filename_binaries(&self) -> &str {

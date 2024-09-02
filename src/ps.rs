@@ -51,7 +51,6 @@ impl Ps {
     }
 
     pub fn run(&self) -> Result<Vec<PsOutput>> {
-        self.state.refresh()?;
         let mut processes = self.state.filter_processes(&self.args.processes)?;
         processes.sort();
         Ok(processes.into_iter().map(PsOutput::from).collect())
