@@ -5,6 +5,7 @@ use std::{
     fs::{create_dir_all, File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     path::Path,
+    process::Command,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -195,8 +196,8 @@ impl State {
         db.execute(
             &format!(
                 r#"
-                DELETE FROM {PROCESSES_TABLE_NAME}
-            "#
+                    DELETE FROM {PROCESSES_TABLE_NAME}
+                "#
             ),
             [],
         )?;
@@ -204,9 +205,9 @@ impl State {
             db.execute(
                 &format!(
                     r#"
-                    INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid)
-                    VALUES ($1, $2, $3, $4)
-                "#
+                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid)
+                        VALUES ($1, $2, $3, $4)
+                    "#
                 ),
                 (proc.name, proc.binary, proc.status.to_string(), proc.pid),
             )?;
@@ -220,11 +221,13 @@ impl State {
             .lock()
             .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
         db.execute(
-            r#"
-                UPDATE process
-                SET status = ?2
-                WHERE name = ?1
-            "#,
+            &format!(
+                r#"
+                    UPDATE {PROCESSES_TABLE_NAME}
+                    SET status = ?2
+                    WHERE name = ?1
+                "#
+            ),
             (process_name, status.to_string().as_str()),
         )?;
         Ok(())
@@ -236,13 +239,24 @@ impl State {
             .lock()
             .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
         db.execute(
-            r#"
-                UPDATE process
-                SET pid = ?2
-                WHERE name = ?1
-            "#,
+            &format!(
+                r#"
+                    UPDATE {PROCESSES_TABLE_NAME}
+                    SET pid = ?2
+                    WHERE name = ?1
+                "#
+            ),
             (process_name, pid),
         )?;
+        Ok(())
+    }
+
+    pub fn refresh(&self) -> Result<()> {
+        let user_pids = Self::get_user_pids()?;
+        self.get_processes()?
+            .into_iter()
+            .map(|process| self.reconcile_pids(process, &user_pids))
+            .collect::<Result<Vec<Process>>>()?;
         Ok(())
     }
 
@@ -309,7 +323,6 @@ impl State {
             project_dir.clone(),
             Self::get_or_create_state_file(&project_dir, LOGS_FILE)?,
             Self::get_or_create_database(&project_dir, DB_FILE)?,
-            // Self::get_or_create_database(&project_dir, PROCESSES_DB_FILE, PROCESSES_TABLE_NAME)?,
         ))
     }
 
@@ -364,5 +377,31 @@ impl State {
             conn.execute(init_query, ())?;
         }
         Ok(())
+    }
+
+    fn reconcile_pids(&self, mut process: Process, user_pids: &HashSet<u32>) -> Result<Process> {
+        if let Some(pid) = process.pid() {
+            if user_pids.get(pid).is_none() {
+                self.set_status(process.name(), ProcessState::Stopped)?;
+                process.status = ProcessState::Stopped;
+                self.set_pid(process.name(), None)?;
+                process.pid = None;
+            }
+        }
+        Ok(process)
+    }
+
+    fn get_user_pids() -> Result<HashSet<u32>> {
+        let mut run = Command::new("ps");
+        let ps_output = run.arg("--no-headers").arg("o").arg("pid").output()?;
+        if !ps_output.status.success() {
+            return Err(Error::new(InnerError::Ps(String::from_utf8(
+                ps_output.stderr,
+            )?)));
+        }
+        Ok(String::from_utf8(ps_output.stdout)?
+            .lines()
+            .flat_map(|line| line.trim().parse())
+            .collect())
     }
 }

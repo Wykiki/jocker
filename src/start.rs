@@ -35,18 +35,22 @@ impl Start {
 
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
+        self.state.refresh()?;
         let processes = self.state.filter_processes(&self.args.processes)?;
-        let rocker_config = ConfigFile::load()?;
-        let processes: Vec<Process> = processes
-            .into_iter()
-            .map(|mut p| {
-                if let Some(process_config) = rocker_config.processes.get(p.name()) {
-                    p.args.clone_from(&process_config.args);
-                    p.env.clone_from(&process_config.env);
-                }
-                p
-            })
-            .collect();
+        let processes = if let Some(rocker_config) = ConfigFile::load()? {
+            processes
+                .into_iter()
+                .map(|mut p| {
+                    if let Some(process_config) = rocker_config.processes.get(p.name()) {
+                        p.args.clone_from(&process_config.args);
+                        p.env.clone_from(&process_config.env);
+                    }
+                    p
+                })
+                .collect()
+        } else {
+            processes
+        };
         for process in processes {
             let state = self.state.clone();
             let process_name = process.name().to_string();

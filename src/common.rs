@@ -1,10 +1,12 @@
-use std::{collections::HashMap, fmt::Display, fs::File, io::BufReader};
+use std::{collections::HashMap, fmt::Display, fs::File, io::BufReader, path::Path};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, InnerError, Result};
 
 pub const ROCKER: &str = "rocker";
+
+pub type Pid = u32;
 
 pub trait Exec {
     async fn exec(&self) -> Result<()>;
@@ -15,7 +17,7 @@ pub struct Process {
     pub name: String,
     pub binary: String,
     pub status: ProcessState,
-    pub pid: Option<i32>,
+    pub pid: Option<Pid>,
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
 }
@@ -38,6 +40,10 @@ impl Process {
 
     pub fn binary(&self) -> &str {
         &self.binary
+    }
+
+    pub fn pid(&self) -> &Option<Pid> {
+        &self.pid
     }
 
     pub fn args(&self) -> &[String] {
@@ -126,7 +132,7 @@ pub struct ProcessSql {
     pub name: String,
     pub binary: String,
     pub status: String,
-    pub pid: Option<i32>,
+    pub pid: Option<u32>,
 }
 
 pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
@@ -144,8 +150,12 @@ pub struct ConfigFile {
 }
 
 impl ConfigFile {
-    pub fn load() -> Result<Self> {
-        let file = File::open("./rocker.yml")?;
+    pub fn load() -> Result<Option<Self>> {
+        let filename = "rocker.yml";
+        if !Path::new(&filename).exists() {
+            return Ok(None);
+        }
+        let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let res = serde_yml::from_reader(reader)?;
         Ok(res)

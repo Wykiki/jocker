@@ -34,6 +34,7 @@ impl Stop {
 
 impl Exec for Stop {
     async fn exec(&self) -> Result<()> {
+        self.state.refresh()?;
         let processes = self.state.filter_processes(&self.args.processes)?;
         let mut handles = JoinSet::new();
         for process in processes {

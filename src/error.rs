@@ -61,7 +61,7 @@ impl<T: Into<InnerError>> From<T> for Error {
 
 #[derive(Debug, thiserror::Error)]
 pub enum InnerError {
-    #[error("Cargo error")]
+    #[error("cargo error")]
     Cargo,
     #[error("Env error")]
     Env(String),
@@ -73,9 +73,13 @@ pub enum InnerError {
     Parse(String),
     #[error("Process not found error")]
     ProcessNotFound(Vec<String>),
+    #[error("ps error")]
+    Ps(String),
     #[error("Start stage error")]
     Start(String),
 
+    #[error("UTF-8 error")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
     #[error("IO error")]
     Io(#[from] std::io::Error),
     #[error("Notify error")]

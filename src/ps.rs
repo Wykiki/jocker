@@ -27,7 +27,7 @@ pub struct PsOutput {
     name: String,
     status: ProcessState,
     #[tabled(display_with = "tabled_display_option")]
-    pid: Option<i32>,
+    pid: Option<u32>,
 }
 
 impl From<Process> for PsOutput {
@@ -51,9 +51,10 @@ impl Ps {
     }
 
     pub fn run(&self) -> Result<Vec<PsOutput>> {
-        let mut bins = self.state.filter_processes(&self.args.processes)?;
-        bins.sort();
-        Ok(bins.into_iter().map(PsOutput::from).collect())
+        self.state.refresh()?;
+        let mut processes = self.state.filter_processes(&self.args.processes)?;
+        processes.sort();
+        Ok(processes.into_iter().map(PsOutput::from).collect())
     }
 }
 
