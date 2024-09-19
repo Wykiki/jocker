@@ -36,7 +36,9 @@ const PROCESSES_TABLE_INIT_SQL: &str = r#"
         name TEXT PRIMARY KEY,
         binary TEXT NOT NULL,
         status TEXT NOT NULL,
-        pid INTEGER
+        pid INTEGER,
+        args JSONB,
+        env JSONB
     )
 "#;
 
@@ -207,11 +209,18 @@ impl State {
             db.execute(
                 &format!(
                     r#"
-                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid)
-                        VALUES ($1, $2, $3, $4)
+                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid, args, env)
+                        VALUES ($1, $2, $3, $4, $5, $6)
                     "#
                 ),
-                (proc.name, proc.binary, proc.status.to_string(), proc.pid),
+                (
+                    proc.name,
+                    proc.binary,
+                    proc.status.to_string(),
+                    proc.pid,
+                    serde_json::to_value(proc.args)?,
+                    serde_json::to_value(proc.env)?,
+                ),
             )?;
         }
         Ok(())

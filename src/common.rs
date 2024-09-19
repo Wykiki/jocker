@@ -1,4 +1,10 @@
-use std::{collections::HashMap, fmt::Display, fs::File, io::BufReader, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    fs::File,
+    io::BufReader,
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +18,7 @@ pub trait Exec {
     async fn exec(&self) -> Result<()>;
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Process {
     pub name: String,
     pub binary: String,
@@ -48,6 +54,18 @@ impl Process {
 
     pub fn args(&self) -> &[String] {
         &self.args[..]
+    }
+}
+
+impl From<(String, ConfigProcess)> for Process {
+    fn from(value: (String, ConfigProcess)) -> Self {
+        Self {
+            binary: value.1.binary.unwrap_or(value.0.clone()),
+            name: value.0,
+            args: value.1.args,
+            env: value.1.env,
+            ..Default::default()
+        }
     }
 }
 
@@ -102,6 +120,12 @@ pub enum ProcessState {
     Healthy,
 }
 
+impl Default for ProcessState {
+    fn default() -> Self {
+        Self::Stopped
+    }
+}
+
 impl Display for ProcessState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
@@ -146,6 +170,8 @@ pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
 
 #[derive(Deserialize, Serialize)]
 pub struct ConfigFile {
+    pub default: Option<ConfigDefault>,
+    pub stack: HashMap<String, ConfigStack>,
     pub processes: HashMap<String, ConfigProcess>,
 }
 
@@ -160,6 +186,17 @@ impl ConfigFile {
         let res = serde_yml::from_reader(reader)?;
         Ok(res)
     }
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct ConfigDefault {
+    pub stack: Option<String>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct ConfigStack {
+    pub stacks: HashSet<String>,
+    pub processes: HashSet<String>,
 }
 
 #[derive(Default, Deserialize, Serialize)]

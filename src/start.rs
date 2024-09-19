@@ -43,6 +43,9 @@ impl Exec for Start {
                     if let Some(process_config) = rocker_config.processes.get(p.name()) {
                         p.args.clone_from(&process_config.args);
                         p.env.clone_from(&process_config.env);
+                        if let Some(ref binary) = process_config.binary {
+                            p.binary.clone_from(binary);
+                        }
                     }
                     p
                 })
