@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, process::Command, sync::Arc};
+use std::{collections::HashMap, process::Command, sync::Arc};
 
 use argh::FromArgs;
 
@@ -15,7 +15,7 @@ use crate::{
 pub struct RefreshArgs {
     /// whether to refresh based on timestamp or not
     #[argh(switch, short = 's')]
-    soft: bool,
+    pub hard: bool,
 }
 
 pub struct Refresh {
@@ -64,7 +64,7 @@ impl Refresh {
     }
 
     fn refresh_binaries(&self) -> Result<()> {
-        if self.args.soft {
+        if !self.args.hard {
             return Ok(());
         }
         let binaries: Vec<BinaryPackage> =
@@ -77,46 +77,48 @@ impl Refresh {
     }
 
     fn refresh_processes(&self) -> Result<()> {
-        let processes = if let Some(rocker_config) = ConfigFile::load()? {
-            rocker_config
-                .processes
-                .into_iter()
-                .map(Into::into)
-                .collect()
+        let previous_processes: HashMap<String, Process> = self
+            .state
+            .get_processes()?
+            .into_iter()
+            .map(|p| (p.name().to_string(), p))
+            .collect();
+        let processes: Vec<Process> = if let Some(rocker_config) = ConfigFile::load()? {
+            let mut processes = vec![];
+            let process_defaults = rocker_config.default.and_then(|d| d.process);
+            for config_process in rocker_config.processes {
+                let mut process: Process = config_process.into();
+
+                if let Some(ref process_defaults) = process_defaults {
+                    process
+                        .cargo_args
+                        .append(&mut process_defaults.cargo_args.clone());
+                }
+                processes.push(process);
+            }
+            processes
         } else {
             self.state
                 .get_binaries()?
                 .into_iter()
-                .map(|b| Process::new(&b.name, &b.name))
+                .map(|b| Process::new(b.name(), b.name()))
                 .collect()
         };
+        let processes: Vec<Process> = processes
+            .into_iter()
+            .map(|mut p| {
+                if let Some(previous_process) = previous_processes.get(p.name()) {
+                    p.pid = previous_process.pid;
+                    p.status = previous_process.status.clone();
+                };
+                p
+            })
+            .collect();
+        println!("Total processes: {}", processes.len());
         self.state.set_processes(processes)?;
 
-        // println!("Total processes: {}", new_processes_len);
-        // if !new_binaries_names.is_empty() {
-        //     println!(
-        //         "Added {} new binaries to the processes list",
-        //         new_binaries_names.len()
-        //     );
-        // }
         Ok(())
     }
-
-    // fn keep_unique<T: Eq + Hash>(mut a: Vec<T>, mut b: Vec<T>) -> Vec<T> {
-    //     a.append(&mut b);
-    //     let init: HashMap<T, usize> = HashMap::new();
-    //     a.into_iter()
-    //         .fold(init, |mut acc, elem| {
-    //             *acc.entry(elem).or_insert(0) += 1;
-    //             // let counter = acc.entry(elem).or_insert(0);
-    //             // acc.insert(elem, *counter + 1 as usize);
-    //             acc
-    //         })
-    //         .into_iter()
-    //         .filter(|elem| elem.1 == 1)
-    //         .map(|elem| elem.0)
-    //         .collect()
-    // }
 }
 
 impl Exec for Refresh {

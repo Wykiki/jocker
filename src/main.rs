@@ -16,7 +16,7 @@ use cli::{Cli, CliSubCommand};
 use common::Exec;
 use logs::Logs;
 use ps::Ps;
-use refresh::Refresh;
+use refresh::{Refresh, RefreshArgs};
 use start::Start;
 use state::State;
 use stop::Stop;
@@ -30,10 +30,12 @@ async fn main() -> Result<()> {
     }
     let cli: Cli = argh::from_env();
     let state = Arc::new(State::new()?);
+    Refresh::new(RefreshArgs { hard: cli.refresh }, state.clone())
+        .exec()
+        .await?;
     match cli.sub_command {
         CliSubCommand::Logs(args) => Logs::new(args, state.clone()).exec().await,
         CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec().await,
-        CliSubCommand::Refresh(args) => Refresh::new(args, state.clone()).exec().await,
         CliSubCommand::Start(args) => Start::new(args, state.clone()).exec().await,
         CliSubCommand::Stop(args) => Stop::new(args, state.clone()).exec().await,
         _ => panic!(),

@@ -38,6 +38,7 @@ const PROCESSES_TABLE_INIT_SQL: &str = r#"
         status TEXT NOT NULL,
         pid INTEGER,
         args JSONB,
+        cargo_args JSONB,
         env JSONB
     )
 "#;
@@ -172,7 +173,7 @@ impl State {
             .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
         let mut stmt = db.prepare(
             r#"
-                SELECT name, binary, status, pid
+                SELECT name, binary, status, pid, args, cargo_args, env
                 FROM process
             "#,
         )?;
@@ -182,6 +183,9 @@ impl State {
                 binary: row.get(1)?,
                 status: row.get(2)?,
                 pid: row.get(3)?,
+                args: row.get(4)?,
+                cargo_args: row.get(5)?,
+                env: row.get(6)?,
             })
         })?;
         let mut processes = vec![];
@@ -209,8 +213,8 @@ impl State {
             db.execute(
                 &format!(
                     r#"
-                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid, args, env)
-                        VALUES ($1, $2, $3, $4, $5, $6)
+                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid, args, cargo_args, env)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
                     "#
                 ),
                 (
@@ -219,6 +223,7 @@ impl State {
                     proc.status.to_string(),
                     proc.pid,
                     serde_json::to_value(proc.args)?,
+                    serde_json::to_value(proc.cargo_args)?,
                     serde_json::to_value(proc.env)?,
                 ),
             )?;

@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::error::{Error, InnerError, Result};
 
@@ -25,6 +26,7 @@ pub struct Process {
     pub status: ProcessState,
     pub pid: Option<Pid>,
     pub args: Vec<String>,
+    pub cargo_args: Vec<String>,
     pub env: HashMap<String, String>,
 }
 
@@ -36,6 +38,7 @@ impl Process {
             status: ProcessState::Stopped,
             pid: None,
             args: Vec::new(),
+            cargo_args: Vec::new(),
             env: HashMap::new(),
         }
     }
@@ -53,7 +56,11 @@ impl Process {
     }
 
     pub fn args(&self) -> &[String] {
-        &self.args[..]
+        self.args.as_slice()
+    }
+
+    pub fn cargo_args(&self) -> &[String] {
+        self.cargo_args.as_slice()
     }
 }
 
@@ -63,6 +70,7 @@ impl From<(String, ConfigProcess)> for Process {
             binary: value.1.binary.unwrap_or(value.0.clone()),
             name: value.0,
             args: value.1.args,
+            cargo_args: value.1.cargo_args,
             env: value.1.env,
             ..Default::default()
         }
@@ -106,8 +114,9 @@ impl TryFrom<ProcessSql> for Process {
             binary: value.binary,
             status: value.status.try_into()?,
             pid: value.pid,
-            args: Vec::new(),
-            env: HashMap::new(),
+            args: serde_json::from_value(value.args)?,
+            cargo_args: serde_json::from_value(value.cargo_args)?,
+            env: serde_json::from_value(value.env)?,
         })
     }
 }
@@ -157,6 +166,9 @@ pub struct ProcessSql {
     pub binary: String,
     pub status: String,
     pub pid: Option<u32>,
+    pub args: Value,
+    pub cargo_args: Value,
+    pub env: Value,
 }
 
 pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
@@ -168,9 +180,10 @@ pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
 
 // CONFIG
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ConfigFile {
     pub default: Option<ConfigDefault>,
+    #[serde(default)]
     pub stack: HashMap<String, ConfigStack>,
     pub processes: HashMap<String, ConfigProcess>,
 }
@@ -184,24 +197,38 @@ impl ConfigFile {
         let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let res = serde_yml::from_reader(reader)?;
+        dbg!(&res);
         Ok(res)
     }
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ConfigDefault {
     pub stack: Option<String>,
+    pub process: Option<ConfigProcessDefault>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ConfigProcessDefault {
+    #[serde(default)]
+    pub cargo_args: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ConfigStack {
+    #[serde(default)]
     pub stacks: HashSet<String>,
+    #[serde(default)]
     pub processes: HashSet<String>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ConfigProcess {
     pub binary: Option<String>,
+    #[serde(default)]
     pub args: Vec<String>,
+    #[serde(default)]
+    pub cargo_args: Vec<String>,
+    #[serde(default)]
     pub env: HashMap<String, String>,
 }

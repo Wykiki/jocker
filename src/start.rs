@@ -8,7 +8,7 @@ use dotenvy::dotenv_iter;
 use fork::{fork, Fork};
 
 use crate::{
-    common::{ConfigFile, Exec, Process, ProcessState},
+    common::{Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
     state::State,
 };
@@ -36,23 +36,6 @@ impl Start {
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
-        let processes = if let Some(rocker_config) = ConfigFile::load()? {
-            processes
-                .into_iter()
-                .map(|mut p| {
-                    if let Some(process_config) = rocker_config.processes.get(p.name()) {
-                        p.args.clone_from(&process_config.args);
-                        p.env.clone_from(&process_config.env);
-                        if let Some(ref binary) = process_config.binary {
-                            p.binary.clone_from(binary);
-                        }
-                    }
-                    p
-                })
-                .collect()
-        } else {
-            processes
-        };
         for process in processes {
             let state = self.state.clone();
             let process_name = process.name().to_string();
@@ -92,13 +75,17 @@ fn run(state: Arc<State>, process: Process) -> Result<()> {
 }
 
 fn run_child(state: Arc<State>, process: Process) -> Result<()> {
+    state.log(format!("{}: Process: {:?}", process.name(), &process))?;
     let binary = process.binary();
     state.set_status(process.name(), ProcessState::Building)?;
-    let mut build = Command::new("cargo")
-        .arg("build")
-        .arg(format!("--package={binary}"))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let mut build = Command::new("cargo");
+    build.arg("build").arg(format!("--package={binary}"));
+    for cargo_arg in process.cargo_args() {
+        build.arg(cargo_arg);
+    }
+    let build = build.stdout(Stdio::piped()).stderr(Stdio::piped());
+    state.log(format!("{}: Build command: {:?}", process.name(), build))?;
+    let mut build = build
         .spawn()
         .map_err(Error::with_context(InnerError::Start(
             "Unable to launch build step".to_string(),
@@ -129,8 +116,11 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     run.stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .arg("run")
-        .arg(format!("--package={binary}"))
-        .arg("--");
+        .arg(format!("--package={binary}"));
+    for cargo_arg in process.cargo_args() {
+        run.arg(cargo_arg);
+    }
+    run.arg("--");
     for arg in process.args() {
         run.arg(arg);
     }
@@ -142,6 +132,7 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     for (key, val) in process.env.iter() {
         run.env(key, val);
     }
+    state.log(format!("{}: Run command: {:?}", process.name(), run))?;
     let mut run = run.spawn().map_err(Error::with_context(InnerError::Start(
         "Unable to run crate".to_string(),
     )))?;

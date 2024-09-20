@@ -5,6 +5,10 @@ use crate::{logs::LogsArgs, ps::PsArgs, refresh::RefreshArgs, start::StartArgs, 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Top-level command.
 pub struct Cli {
+    /// whether to trigger a hard refresh
+    #[argh(switch)]
+    pub refresh: bool,
+
     #[argh(subcommand)]
     pub sub_command: CliSubCommand,
 }
