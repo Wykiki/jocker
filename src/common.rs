@@ -197,7 +197,6 @@ impl ConfigFile {
         let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let res = serde_yml::from_reader(reader)?;
-        dbg!(&res);
         Ok(res)
     }
 }
