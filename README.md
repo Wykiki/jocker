@@ -23,3 +23,5 @@ cargo install --offline --path .
 - [ ] Refresh process config when `rocker.yaml` is updated
 - [ ] Split project into different crates
 - [ ] Have an UI
+- [ ] Correctly show logs while building
+- [ ] Correctly stop child processes
