@@ -84,6 +84,8 @@ pub enum InnerError {
     Io(#[from] std::io::Error),
     #[error("Notify error")]
     Notify(#[from] notify::Error),
+    #[error("ParseIntError error")]
+    ParseIntError(#[from] std::num::ParseIntError),
     #[error("Serde JSON error")]
     SerdeJson(#[from] serde_json::Error),
     #[error("Serde YAML error")]

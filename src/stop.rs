@@ -1,4 +1,4 @@
-use std::{process::Command, sync::Arc};
+use std::{collections::HashSet, fmt::Display, io::BufRead, process::Command, sync::Arc};
 
 use argh::FromArgs;
 use tokio::task::JoinSet;
@@ -41,7 +41,15 @@ impl Exec for Stop {
             handles.spawn(run(state, process, self.args.clone()));
         }
 
-        while (handles.join_next().await).is_some() {}
+        while let Some(res) = handles.join_next().await {
+            match res {
+                Err(e) => println!("Error while stopping process: {e}"),
+                Ok(ok) => match ok {
+                    Err(ee) => println!("Error while stopping process inner: {ee}"),
+                    _ => (),
+                },
+            }
+        }
 
         Ok(())
     }
@@ -60,17 +68,87 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
         return Ok(());
     };
     println!("Stopping process {process_name} ...");
-    let mut kill = Command::new("kill");
-    kill.arg("-s");
-    if args.kill {
-        kill.arg("KILL");
+    let signal = if args.kill {
+        KillSignal::Kill
     } else {
-        kill.arg("TERM");
-    }
-    kill.arg(pid.to_string());
-    kill.status()?;
+        KillSignal::default()
+    };
+    kill_parent_and_children(KillArgs { pid, signal })?;
     state.set_status(&process_name, ProcessState::Stopped)?;
     state.set_pid(&process_name, None)?;
     println!("Process {process_name} stopped");
+    Ok(())
+}
+
+// TODO : Recursion may be needed to salvage childrens of childrens
+fn kill_parent_and_children(args: KillArgs) -> Result<()> {
+    let mut pids = ps(PsArgs {
+        ppid: Some(args.pid),
+    })?;
+    pids.insert(args.pid);
+    for pid in pids {
+        kill(KillArgs {
+            pid,
+            ..args.clone()
+        })?;
+    }
+    Ok(())
+}
+
+struct PsArgs {
+    ppid: Option<u32>,
+}
+
+fn ps(args: PsArgs) -> Result<HashSet<u32>> {
+    let mut ps = Command::new("ps");
+    if let Some(ppid) = args.ppid {
+        ps.arg("--ppid");
+        ps.arg(ppid.to_string());
+    }
+    ps.arg("--no-headers");
+    ps.arg("-o");
+    ps.arg("pid");
+    let output = ps.output()?;
+    let mut pids: HashSet<u32> = HashSet::new();
+    for line in output.stdout.lines() {
+        pids.insert(line?.trim().parse()?);
+    }
+    Ok(pids)
+}
+
+#[derive(Clone)]
+enum KillSignal {
+    Kill,
+    Term,
+}
+
+impl Default for KillSignal {
+    fn default() -> Self {
+        Self::Term
+    }
+}
+
+impl Display for KillSignal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            Self::Kill => "KILL",
+            Self::Term => "TERM",
+        };
+        write!(f, "{text}")
+    }
+}
+
+#[derive(Clone)]
+struct KillArgs {
+    pid: u32,
+    signal: KillSignal,
+}
+
+fn kill(args: KillArgs) -> Result<()> {
+    let mut kill = Command::new("kill");
+    kill.arg("-s");
+    kill.arg(args.signal.to_string());
+    kill.arg(args.pid.to_string());
+    kill.status()?;
     Ok(())
 }
