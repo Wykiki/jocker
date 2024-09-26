@@ -12,9 +12,19 @@ does `docker`, but stick to its API when relevant.
 ## Installation
 
 ```sh
+cargo install --git https://gitlab.com/wykiki/rocker.git rocker
+
+# From sources
 git clone https://gitlab.com/wykiki/rocker.git
 cargo install --offline --path .
 ```
+
+## Wipe state
+
+In case you have weird behaviour, you can delete `rocker`'s states located
+under `~/.local/state/rocker/`. Doing so won't terminate running subprocesses,
+so you may need to terminate them yourself, with some `kill`, like :
+`ps u | grep target | awk '{print $2}' | xargs kill`
 
 ## TODO
 
@@ -25,3 +35,12 @@ cargo install --offline --path .
 - [ ] Have an UI
 - [ ] Correctly show logs while building
 - [ ] Correctly stop child processes
+
+## Potential Naming
+
+- clicker
+- pseudocker
+- crun
+- cr
+- rrun
+- rr
