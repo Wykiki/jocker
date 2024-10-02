@@ -1,4 +1,5 @@
 mod cli;
+mod command;
 mod common;
 mod error;
 mod export_info;

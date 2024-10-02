@@ -164,7 +164,7 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
 
 static ENVSUBST_REGEX: OnceCell<Regex> = OnceCell::new();
 
-fn envsubst(value: &str, env: &HashMap<String, String>) -> String {
+pub fn envsubst(value: &str, env: &HashMap<String, String>) -> String {
     let re = ENVSUBST_REGEX.get_or_init(|| Regex::new(r"\$\{([a-zA-Z0-9-_:/.\[\]]*)}").unwrap());
 
     let mut last_range_end = 0;
