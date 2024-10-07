@@ -1,5 +1,8 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    fmt::Display,
+    hash::Hash,
     process::{exit, Command, Stdio},
     sync::Arc,
 };
@@ -9,6 +12,7 @@ use dotenvy::dotenv_iter;
 use fork::{fork, Fork};
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::{
     common::{Exec, Process, ProcessState},
@@ -39,6 +43,32 @@ impl Start {
 impl Exec for Start {
     async fn exec(&self) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes)?;
+        for process in &processes {
+            self.state
+                .set_status(process.name(), ProcessState::Building)?;
+        }
+        let binaries: Vec<&str> = processes.iter().map(|p| p.binary()).collect();
+        let cargo_args: Vec<&str> = processes
+            .iter()
+            .flat_map(|p| p.cargo_args())
+            .map(String::as_str)
+            .collect();
+        match build(
+            self.state.clone(),
+            binaries.as_slice(),
+            cargo_args.as_slice(),
+        )
+        .await
+        {
+            Ok(_) => (),
+            Err(e) => {
+                println!("Error while building crates: {e}");
+                for process in &processes {
+                    self.state
+                        .set_status(process.name(), ProcessState::Stopped)?;
+                }
+            }
+        }
         for process in processes {
             let state = self.state.clone();
             let process_name = process.name().to_string();
@@ -51,8 +81,64 @@ impl Exec for Start {
     }
 }
 
+async fn build<S>(state: Arc<State>, binaries: &[S], cargo_args: &[S]) -> Result<()>
+where
+    S: AsRef<OsStr> + Display + Eq + Hash,
+{
+    let mut env: HashMap<String, String> = HashMap::new();
+    if let Ok(dotenv) = dotenv_iter() {
+        for (key, val) in dotenv.flatten() {
+            env.insert(key, val);
+        }
+    }
+    let env = env;
+    let mut build = tokio::process::Command::new("cargo");
+    build.stdout(Stdio::piped()).stderr(Stdio::piped());
+    build.arg("build");
+    for arg in HashSet::<&S>::from_iter(cargo_args) {
+        build.arg(arg);
+    }
+    for binary in HashSet::<&S>::from_iter(binaries) {
+        build.arg(format!("--bin={binary}"));
+    }
+    for (key, val) in env.iter() {
+        build.env(key, val);
+    }
+    state.log(format!("Build command: {:?}", build))?;
+    let mut build = build
+        .spawn()
+        .map_err(Error::with_context(InnerError::Start(
+            "Unable to launch build step".to_string(),
+        )))?;
+    if let Some(stdout) = build.stdout.take() {
+        tokio::spawn(async {
+            let mut stdout_reader = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = stdout_reader.next_line().await {
+                println!("{}", line);
+            }
+        });
+    }
+    if let Some(stderr) = build.stderr.take() {
+        tokio::spawn(async {
+            let mut stderr_reader = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = stderr_reader.next_line().await {
+                println!("{}", line);
+            }
+        });
+    }
+    let build = build.wait().await?;
+    if !build.success() {
+        // state.set_status(process.name(), ProcessState::Stopped)?;
+        return Err(Error::new(InnerError::Start(format!(
+            "Build produced exit code {}",
+            build
+        ))));
+    }
+    Ok(())
+}
+
 fn run(state: Arc<State>, process: Process) -> Result<()> {
-    if process.status != ProcessState::Stopped {
+    if process.status != ProcessState::Stopped && process.status != ProcessState::Building {
         println!("Process is already started: {}", process.name());
         return Ok(());
     }
@@ -88,54 +174,11 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
         env.insert(key.to_string(), val.to_string());
     }
     let env = env;
-    state.log(format!("{}: Process: {:?}", process.name(), &process))?;
-    let binary = process.binary();
-    state.set_status(process.name(), ProcessState::Building)?;
-    let mut build = Command::new("cargo");
-    build.arg("build").arg(format!("--package={binary}"));
-    for cargo_arg in process.cargo_args() {
-        build.arg(envsubst(cargo_arg, &env));
-    }
-    for (key, val) in env.iter() {
-        build.env(key, val);
-    }
-    let build = build.stdout(Stdio::piped()).stderr(Stdio::piped());
-    state.log(format!("{}: Build command: {:?}", process.name(), build))?;
-    let mut build = build
-        .spawn()
-        .map_err(Error::with_context(InnerError::Start(
-            "Unable to launch build step".to_string(),
-        )))?;
-    if let Some(stdout) = build.stdout.take() {
-        state.log_process(&process, stdout)?;
-    } else {
-        state.log("Unable to take ownership of build stdout")?;
-    }
-    if let Some(stderr) = build.stderr.take() {
-        state.log_process(&process, stderr)?;
-    } else {
-        state.log("Unable to take ownership of build stderr")?;
-    }
-    let build = build.wait()?;
-    if !build.success() {
-        state.set_status(process.name(), ProcessState::Stopped)?;
-        return Err(Error::new(InnerError::Start(format!(
-            "Build for process {} produced exit code {}",
-            process.name(),
-            build
-        ))));
-    }
 
     state.set_status(process.name(), ProcessState::Running)?;
 
-    let mut run = Command::new("cargo");
-    run.stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .arg("run")
-        .arg(format!("--package={binary}"));
-    for cargo_arg in process.cargo_args() {
-        run.arg(envsubst(cargo_arg, &env));
-    }
+    let mut run = Command::new(format!("./target/debug/{}", process.binary()));
+    run.stdout(Stdio::piped()).stderr(Stdio::piped());
     run.arg("--");
     for arg in process.args() {
         run.arg(envsubst(arg, &env));
