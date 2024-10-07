@@ -179,7 +179,6 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
 
     let mut run = Command::new(format!("./target/debug/{}", process.binary()));
     run.stdout(Stdio::piped()).stderr(Stdio::piped());
-    run.arg("--");
     for arg in process.args() {
         run.arg(envsubst(arg, &env));
     }
