@@ -63,19 +63,15 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
         println!("Process is already stopped: {process_name}");
         return Ok(());
     }
-    let pid = if let Some(pid) = process.pid {
-        pid
-    } else {
-        println!("Process does not have a pid: {process_name}");
-        return Ok(());
-    };
-    println!("Stopping process {process_name} ...");
-    let signal = if args.kill {
-        KillSignal::Kill
-    } else {
-        KillSignal::default()
-    };
-    kill_parent_and_children(KillArgs { pid, signal })?;
+    if let Some(pid) = process.pid {
+        println!("Stopping process {process_name} ...");
+        let signal = if args.kill {
+            KillSignal::Kill
+        } else {
+            KillSignal::default()
+        };
+        kill_parent_and_children(KillArgs { pid, signal })?;
+    }
     state.set_status(&process_name, ProcessState::Stopped)?;
     state.set_pid(&process_name, None)?;
     println!("Process {process_name} stopped");
