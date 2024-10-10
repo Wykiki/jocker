@@ -1,7 +1,13 @@
 [package]
-name = "rocker"
+name = "jocker"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://gitlab.com/wykiki/jocker"
+description = """
+Run your monorepo binaries locally with ease !
+"""
 
 [dependencies]
 argh = "0.1.12"

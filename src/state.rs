@@ -14,7 +14,7 @@ use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{Process, ProcessSql, ProcessState, ROCKER},
+    common::{Process, ProcessSql, ProcessState, JOCKER},
     error::{Error, InnerError, Result},
     export_info::{BinaryPackage, BinaryPackageSql},
 };
@@ -355,7 +355,7 @@ impl State {
         let state_dir =
             env::var("XDG_STATE_HOME").unwrap_or_else(|_| format!("{home}/.local/state"));
 
-        let project_dir = format!("{state_dir}/{ROCKER}/{hashed_pwd}");
+        let project_dir = format!("{state_dir}/{JOCKER}/{hashed_pwd}");
         let project_dir_path = Path::new(&project_dir);
         if !project_dir_path.exists() {
             create_dir_all(project_dir_path)

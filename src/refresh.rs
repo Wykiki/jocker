@@ -83,10 +83,10 @@ impl Refresh {
             .into_iter()
             .map(|p| (p.name().to_string(), p))
             .collect();
-        let processes: Vec<Process> = if let Some(rocker_config) = ConfigFile::load()? {
+        let processes: Vec<Process> = if let Some(jocker_config) = ConfigFile::load()? {
             let mut processes = vec![];
-            let process_defaults = rocker_config.default.and_then(|d| d.process);
-            for config_process in rocker_config.processes {
+            let process_defaults = jocker_config.default.and_then(|d| d.process);
+            for config_process in jocker_config.processes {
                 let mut process: Process = config_process.into();
 
                 if let Some(ref process_defaults) = process_defaults {

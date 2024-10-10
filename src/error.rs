@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-/// Alias for a `Result` with the error type [`rocker::Error`].
+/// Alias for a `Result` with the error type [`jocker::Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct Error {
@@ -44,7 +44,7 @@ impl Display for Error {
 
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RockerError: {}", self)
+        write!(f, "JockerError: {}", self)
     }
 }
 

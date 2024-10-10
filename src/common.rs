@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::error::{Error, InnerError, Result};
 
-pub const ROCKER: &str = "rocker";
+pub const JOCKER: &str = "jocker";
 
 pub type Pid = u32;
 
@@ -190,7 +190,7 @@ pub struct ConfigFile {
 
 impl ConfigFile {
     pub fn load() -> Result<Option<Self>> {
-        let filename = "rocker.yml";
+        let filename = "jocker.yml";
         if !Path::new(&filename).exists() {
             return Ok(None);
         }
