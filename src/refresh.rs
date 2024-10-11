@@ -1,7 +1,5 @@
 use std::{collections::HashMap, process::Command, sync::Arc};
 
-use argh::FromArgs;
-
 use crate::{
     common::{ConfigFile, Exec, Process},
     error::{Error, InnerError, Result},
@@ -9,12 +7,8 @@ use crate::{
     state::State,
 };
 
-#[derive(Debug, FromArgs, PartialEq)]
-/// Refresh the list of project's binaries
-#[argh(subcommand, name = "refresh")]
+#[derive(Debug, PartialEq)]
 pub struct RefreshArgs {
-    /// whether to refresh based on timestamp or not
-    #[argh(switch, short = 's')]
     pub hard: bool,
 }
 
