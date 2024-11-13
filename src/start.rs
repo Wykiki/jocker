@@ -1,8 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
-    ffi::OsStr,
-    fmt::Display,
-    hash::Hash,
+    collections::HashMap,
     process::{exit, Command, Stdio},
     sync::Arc,
 };
@@ -12,9 +9,9 @@ use dotenvy::dotenv_iter;
 use fork::{fork, Fork};
 use once_cell::sync::OnceCell;
 use regex::Regex;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::{
+    command::{cargo::Cargo, util::CommandLogger},
     common::{Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
     state::State,
@@ -38,6 +35,59 @@ impl Start {
     pub fn new(args: StartArgs, state: Arc<State>) -> Self {
         Start { args, state }
     }
+
+    async fn build(&self, processes: &[Process]) -> Result<()> {
+        let binaries: Vec<&str> = processes.iter().map(|p| p.binary()).collect();
+        let cargo_args: Vec<&str> = processes
+            .iter()
+            .flat_map(|p| p.cargo_args())
+            .map(String::as_str)
+            .collect();
+        match Cargo::build(binaries.as_slice(), cargo_args.as_slice()).await {
+            Ok(mut build_process) => {
+                build_process.log_to_console().await?;
+                let build_exit_status = build_process.wait().await?;
+
+                if !build_exit_status.success() {
+                    return Err(Error::new(InnerError::Start(format!(
+                        "Build produced exit code {}",
+                        build_exit_status
+                    ))));
+                }
+            }
+            Err(e) => {
+                println!("Error while building crates: {e}");
+                for process in processes {
+                    self.state
+                        .set_status(process.name(), ProcessState::Stopped)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn run(&self, process: Process) -> Result<()> {
+        if process.status != ProcessState::Stopped && process.status != ProcessState::Building {
+            println!("Process is already started: {}", process.name());
+            return Ok(());
+        }
+        let process_name = process.name().to_string();
+        println!("Starting process {process_name} ...");
+        match fork() {
+            Ok(Fork::Parent(child_pid)) => self.state.set_pid(process.name(), Some(child_pid))?,
+            Ok(Fork::Child) => {
+                if let Err(err) = run_child(self.state.clone(), process) {
+                    self.state.log(err).unwrap_or_else(|e| {
+                        panic!("Unable to log for process {}: {e}", process_name)
+                    })
+                }
+                exit(0);
+            }
+            Err(e) => self.state.log(format!("Unable to fork: {e}"))?,
+        }
+        println!("Process {process_name} started");
+        Ok(())
+    }
 }
 
 impl Exec for Start {
@@ -47,32 +97,10 @@ impl Exec for Start {
             self.state
                 .set_status(process.name(), ProcessState::Building)?;
         }
-        let binaries: Vec<&str> = processes.iter().map(|p| p.binary()).collect();
-        let cargo_args: Vec<&str> = processes
-            .iter()
-            .flat_map(|p| p.cargo_args())
-            .map(String::as_str)
-            .collect();
-        match build(
-            self.state.clone(),
-            binaries.as_slice(),
-            cargo_args.as_slice(),
-        )
-        .await
-        {
-            Ok(_) => (),
-            Err(e) => {
-                println!("Error while building crates: {e}");
-                for process in &processes {
-                    self.state
-                        .set_status(process.name(), ProcessState::Stopped)?;
-                }
-            }
-        }
+        self.build(processes.as_slice()).await?;
         for process in processes {
-            let state = self.state.clone();
             let process_name = process.name().to_string();
-            if let Err(e) = run(state, process) {
+            if let Err(e) = self.run(process) {
                 println!("Error while starting process {process_name}: {e}")
             }
         }
@@ -81,88 +109,7 @@ impl Exec for Start {
     }
 }
 
-async fn build<S>(state: Arc<State>, binaries: &[S], cargo_args: &[S]) -> Result<()>
-where
-    S: AsRef<OsStr> + Display + Eq + Hash,
-{
-    let mut env: HashMap<String, String> = HashMap::new();
-    if let Ok(dotenv) = dotenv_iter() {
-        for (key, val) in dotenv.flatten() {
-            env.insert(key, val);
-        }
-    }
-    let env = env;
-    let mut build = tokio::process::Command::new("cargo");
-    build.stdout(Stdio::piped()).stderr(Stdio::piped());
-    build.arg("build");
-    for arg in HashSet::<&S>::from_iter(cargo_args) {
-        build.arg(arg);
-    }
-    for binary in HashSet::<&S>::from_iter(binaries) {
-        build.arg(format!("--bin={binary}"));
-    }
-    for (key, val) in env.iter() {
-        build.env(key, val);
-    }
-    state.log(format!("Build command: {:?}", build))?;
-    let mut build = build
-        .spawn()
-        .map_err(Error::with_context(InnerError::Start(
-            "Unable to launch build step".to_string(),
-        )))?;
-    if let Some(stdout) = build.stdout.take() {
-        tokio::spawn(async {
-            let mut stdout_reader = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = stdout_reader.next_line().await {
-                println!("{}", line);
-            }
-        });
-    }
-    if let Some(stderr) = build.stderr.take() {
-        tokio::spawn(async {
-            let mut stderr_reader = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = stderr_reader.next_line().await {
-                println!("{}", line);
-            }
-        });
-    }
-    let build = build.wait().await?;
-    if !build.success() {
-        // state.set_status(process.name(), ProcessState::Stopped)?;
-        return Err(Error::new(InnerError::Start(format!(
-            "Build produced exit code {}",
-            build
-        ))));
-    }
-    Ok(())
-}
-
-fn run(state: Arc<State>, process: Process) -> Result<()> {
-    if process.status != ProcessState::Stopped && process.status != ProcessState::Building {
-        println!("Process is already started: {}", process.name());
-        return Ok(());
-    }
-    let process_name = process.name().to_string();
-    println!("Starting process {process_name} ...");
-    match fork() {
-        Ok(Fork::Parent(child_pid)) => state.set_pid(process.name(), Some(child_pid))?,
-        Ok(Fork::Child) => {
-            state.log("Start child")?;
-            if let Err(err) = run_child(state.clone(), process) {
-                state.log("Child in error")?;
-                state
-                    .log(err)
-                    .unwrap_or_else(|e| panic!("Unable to log for process {}: {e}", process_name))
-            }
-            state.log("End child")?;
-            exit(0);
-        }
-        Err(e) => state.log(format!("Unable to fork: {e}"))?,
-    }
-    println!("Process {process_name} started");
-    Ok(())
-}
-
+/// It is NOT possible to use tokio in a forked process
 fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     let mut env: HashMap<String, String> = HashMap::new();
     if let Ok(dotenv) = dotenv_iter() {
@@ -186,20 +133,20 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
         run.env(key, val);
     }
     state.log(format!("{}: Run command: {:?}", process.name(), run))?;
-    let mut run = run.spawn().map_err(Error::with_context(InnerError::Start(
+    let mut run_process = run.spawn().map_err(Error::with_context(InnerError::Start(
         "Unable to run crate".to_string(),
     )))?;
-    if let Some(stdout) = run.stdout.take() {
+    if let Some(stdout) = run_process.stdout.take() {
         state.log_process(&process, stdout)?;
     } else {
         state.log("Unable to take ownership of run stdout")?;
     }
-    if let Some(stderr) = run.stderr.take() {
+    if let Some(stderr) = run_process.stderr.take() {
         state.log_process(&process, stderr)?;
     } else {
         state.log("Unable to take ownership of run stderr")?;
     }
-    run.wait()?;
+    run_process.wait()?;
     state.set_status(process.name(), ProcessState::Stopped)?;
     Ok(())
 }
