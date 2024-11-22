@@ -29,8 +29,8 @@ so you may need to terminate them yourself, with some `kill`, like :
 ## TODO
 
 - [x] Reconcile process status at each CLI call
-- [ ] Automatically refresh process list when project workspace is updated
-- [ ] Refresh process config when `jocker.yaml` is updated
+- [x] Automatically refresh process list when project workspace is updated
+- [x] Refresh process config when `jocker.yaml` is updated
 - [ ] Split project into different crates
 - [ ] Have an UI
 - [ ] Handle `stack` keyword in config

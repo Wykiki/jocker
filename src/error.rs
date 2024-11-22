@@ -92,6 +92,10 @@ pub enum InnerError {
     SerdeYaml(#[from] serde_yml::Error),
     #[error("Sqlite error")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("SystemTime error")]
+    SystemTime(#[from] std::time::SystemTimeError),
+    #[error("TryFromInt error")]
+    TryFromInt(#[from] std::num::TryFromIntError),
     #[error("URL error")]
     Url(#[from] url::ParseError),
     #[error("Var error")]

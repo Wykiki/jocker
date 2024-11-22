@@ -1,4 +1,6 @@
-use std::{collections::HashMap, process::Command, sync::Arc};
+use std::{collections::HashMap, fs::File, path::Path, process::Command, sync::Arc};
+
+use chrono::Utc;
 
 use crate::{
     common::{ConfigFile, Exec, Process},
@@ -20,6 +22,42 @@ pub struct Refresh {
 impl Refresh {
     pub fn new(args: RefreshArgs, state: Arc<State>) -> Self {
         Refresh { args, state }
+    }
+
+    fn needs_to_refresh_binaries(&self) -> Result<bool> {
+        let elapsed_since_last_update = self.state.get_elapsed_since_last_binaries_update()?;
+        let files = ["./Cargo.toml", "./Cargo.lock"];
+        for file in files {
+            if Path::new(file).exists()
+                && File::open(file)?
+                    .metadata()?
+                    .modified()?
+                    .elapsed()?
+                    .as_secs()
+                    < elapsed_since_last_update
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn needs_to_refresh_processes(&self) -> Result<bool> {
+        let elapsed_since_last_update = self.state.get_elapsed_since_last_processes_update()?;
+        let files = ["./jocker.yml", "./jocker.override.yml"];
+        for file in files {
+            if Path::new(file).exists()
+                && File::open(file)?
+                    .metadata()?
+                    .modified()?
+                    .elapsed()?
+                    .as_secs()
+                    < elapsed_since_last_update
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn fetch_bins() -> Result<Vec<SerializedPackage>> {
@@ -53,8 +91,15 @@ impl Refresh {
     }
 
     fn refresh(&self) -> Result<()> {
-        self.refresh_binaries()?;
-        self.refresh_processes()
+        if self.needs_to_refresh_binaries()? {
+            self.refresh_binaries()?;
+            self.state.set_binaries_updated_at(Utc::now())?;
+        }
+        if self.needs_to_refresh_processes()? {
+            self.refresh_processes()?;
+            self.state.set_processes_updated_at(Utc::now())?;
+        }
+        Ok(())
     }
 
     fn refresh_binaries(&self) -> Result<()> {

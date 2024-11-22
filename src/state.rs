@@ -9,8 +9,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use chrono::Utc;
-use rusqlite::Connection;
+use chrono::{DateTime, Utc};
+use rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -20,6 +20,14 @@ use crate::{
 };
 
 const DB_FILE: &str = "db.sqlite3";
+const METADATA_TABLE_NAME: &str = "metadata";
+const METADATA_TABLE_INIT_SQL: &str = r#"
+    CREATE TABLE metadata (
+        id BIGINT PRIMARY KEY,
+        binaries_updated_at DATETIME,
+        processes_updated_at DATETIME
+    )
+"#;
 const BINARIES_TABLE_NAME: &str = "binary";
 const BINARIES_TABLE_INIT_SQL: &str = r#"
     CREATE TABLE binary (
@@ -45,9 +53,7 @@ const PROCESSES_TABLE_INIT_SQL: &str = r#"
 
 pub struct State {
     _project_dir: String,
-    // filename_binaries: String,
     filename_logs: String,
-    // filename_processes: String,
     file_lock: RwLock<()>,
     db: Arc<Mutex<Connection>>,
 }
@@ -57,20 +63,13 @@ impl State {
         let (project_dir, filename_logs, db_connection) = Self::get_or_create_state_dir()?;
         let state = Self {
             _project_dir: project_dir,
-            // filename_binaries: filename_binaries.clone(),
             filename_logs,
-            // filename_processes: filename_processes.clone(),
             file_lock: RwLock::new(()),
             db: Arc::new(Mutex::new(db_connection)),
-            // processes_db: Arc::new(Mutex::new(Connection::open(filename_processes)?)),
         };
         state.refresh()?;
         Ok(state)
     }
-
-    // pub fn filename_binaries(&self) -> &str {
-    //     &self.filename_binaries
-    // }
 
     pub fn filename_logs(&self) -> &str {
         &self.filename_logs
@@ -82,9 +81,101 @@ impl State {
         format!("{project_dir}/{LOG_PROCESS_PREFIX}{process_name}{LOG_PROCESS_SUFFIX}")
     }
 
-    // pub fn filename_processes(&self) -> &str {
-    //     &self.filename_processes
-    // }
+    pub fn get_elapsed_since_last_binaries_update(&self) -> Result<u64> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let mut stmt = db.prepare(&format!(
+            r#"
+                SELECT binaries_updated_at
+                FROM {METADATA_TABLE_NAME}
+                LIMIT 1
+            "#
+        ))?;
+        let date = if let Some(date) = stmt
+            .query_row([], |row| row.get::<usize, Option<DateTime<Utc>>>(0))
+            .optional()?
+            .flatten()
+        {
+            date
+        } else {
+            DateTime::UNIX_EPOCH
+        };
+        Ok(Utc::now()
+            .signed_duration_since(date)
+            .num_seconds()
+            .clamp(0, i64::MAX)
+            .try_into()?)
+    }
+
+    pub fn get_elapsed_since_last_processes_update(&self) -> Result<u64> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let mut stmt = db.prepare(&format!(
+            r#"
+                SELECT processes_updated_at
+                FROM {METADATA_TABLE_NAME}
+                LIMIT 1
+            "#
+        ))?;
+        let date = if let Some(date) = stmt
+            .query_row([], |row| row.get::<usize, Option<DateTime<Utc>>>(0))
+            .optional()?
+            .flatten()
+        {
+            date
+        } else {
+            DateTime::UNIX_EPOCH
+        };
+        Ok(Utc::now()
+            .signed_duration_since(date)
+            .num_seconds()
+            .clamp(0, i64::MAX)
+            .try_into()?)
+    }
+
+    pub fn set_binaries_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        db.execute(
+            &format!(
+                r#"
+                    INSERT INTO {METADATA_TABLE_NAME} (id, binaries_updated_at)
+                    VALUES ($1, $2)
+                    ON CONFLICT(id)
+                    DO UPDATE SET
+                        binaries_updated_at = excluded.binaries_updated_at
+                "#,
+            ),
+            (0, date),
+        )?;
+        Ok(())
+    }
+
+    pub fn set_processes_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
+        let db = self
+            .db
+            .lock()
+            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        db.execute(
+            &format!(
+                r#"
+                    INSERT INTO {METADATA_TABLE_NAME} (id, processes_updated_at)
+                    VALUES ($1, $2)
+                    ON CONFLICT(id)
+                    DO UPDATE SET
+                        processes_updated_at = excluded.processes_updated_at
+                "#,
+            ),
+            (0, date),
+        )?;
+        Ok(())
+    }
 
     pub fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
         let db = self
@@ -108,10 +199,6 @@ impl State {
             binaries.push(bin?.try_into()?);
         }
         Ok(binaries)
-        // let file = File::open(self.filename_binaries())
-        //     .map_err(Error::with_context(InnerError::StateIo))?;
-        // let reader = BufReader::new(file);
-        // serde_json::from_reader(reader).map_err(Error::with_context(InnerError::StateIo))
     }
 
     pub fn set_binaries(&self, binaries: Vec<BinaryPackage>) -> Result<()> {
@@ -376,6 +463,7 @@ impl State {
     fn get_or_create_database(project_dir: &str, filename: &str) -> Result<Connection> {
         let database_file = Self::get_or_create_state_file(project_dir, filename)?;
         let conn = Connection::open(database_file)?;
+        Self::init_db(&conn, METADATA_TABLE_NAME, METADATA_TABLE_INIT_SQL)?;
         Self::init_db(&conn, BINARIES_TABLE_NAME, BINARIES_TABLE_INIT_SQL)?;
         Self::init_db(&conn, PROCESSES_TABLE_NAME, PROCESSES_TABLE_INIT_SQL)?;
         Ok(conn)
