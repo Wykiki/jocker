@@ -75,6 +75,8 @@ pub enum InnerError {
     ProcessNotFound(Vec<String>),
     #[error("ps error")]
     Ps(String),
+    #[error("Stack not found error")]
+    StackNotFound(String),
     #[error("Start stage error")]
     Start(String),
 
@@ -100,4 +102,8 @@ pub enum InnerError {
     Url(#[from] url::ParseError),
     #[error("Var error")]
     Var(#[from] std::env::VarError),
+}
+
+pub fn lock_error(e: impl Display) -> Error {
+    Error::new(InnerError::Lock(e.to_string()))
 }

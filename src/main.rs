@@ -34,6 +34,7 @@ async fn main() -> Result<()> {
     Refresh::new(RefreshArgs { hard: cli.refresh }, state.clone())
         .exec()
         .await?;
+    state.set_current_stack(&cli.stack)?;
     match cli.sub_command {
         CliSubCommand::Logs(args) => Logs::new(args, state.clone()).exec().await,
         CliSubCommand::Ps(args) => Ps::new(args, state.clone()).exec().await,

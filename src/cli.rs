@@ -9,6 +9,10 @@ pub struct Cli {
     #[argh(switch)]
     pub refresh: bool,
 
+    /// which stack to use
+    #[argh(option)]
+    pub stack: Option<String>,
+
     #[argh(subcommand)]
     pub sub_command: CliSubCommand,
 }

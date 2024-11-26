@@ -178,13 +178,19 @@ pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Stack {
+    pub name: String,
+    pub processes: HashSet<String>,
+}
+
 // CONFIG
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ConfigFile {
     pub default: Option<ConfigDefault>,
     #[serde(default)]
-    pub stack: HashMap<String, ConfigStack>,
+    pub stacks: HashMap<String, ConfigStack>,
     pub processes: HashMap<String, ConfigProcess>,
 }
 
@@ -216,7 +222,7 @@ pub struct ConfigProcessDefault {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ConfigStack {
     #[serde(default)]
-    pub stacks: HashSet<String>,
+    pub inherits: HashSet<String>,
     #[serde(default)]
     pub processes: HashSet<String>,
 }

@@ -1,9 +1,15 @@
-use std::{collections::HashMap, fs::File, path::Path, process::Command, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    path::Path,
+    process::Command,
+    sync::Arc,
+};
 
 use chrono::Utc;
 
 use crate::{
-    common::{ConfigFile, Exec, Process},
+    common::{ConfigFile, Exec, Process, Stack},
     error::{Error, InnerError, Result},
     export_info::{BinaryPackage, ExportInfoMinimal, SerializedPackage, TargetKind},
     state::State,
@@ -42,8 +48,8 @@ impl Refresh {
         Ok(false)
     }
 
-    fn needs_to_refresh_processes(&self) -> Result<bool> {
-        let elapsed_since_last_update = self.state.get_elapsed_since_last_processes_update()?;
+    fn needs_to_refresh_config(&self) -> Result<bool> {
+        let elapsed_since_last_update = self.state.get_elapsed_since_last_config_update()?;
         let files = ["./jocker.yml", "./jocker.override.yml"];
         for file in files {
             if Path::new(file).exists()
@@ -91,13 +97,14 @@ impl Refresh {
     }
 
     fn refresh(&self) -> Result<()> {
-        if self.needs_to_refresh_binaries()? {
+        if self.args.hard || self.needs_to_refresh_binaries()? {
             self.refresh_binaries()?;
             self.state.set_binaries_updated_at(Utc::now())?;
         }
-        if self.needs_to_refresh_processes()? {
+        if self.args.hard || self.needs_to_refresh_config()? {
             self.refresh_processes()?;
-            self.state.set_processes_updated_at(Utc::now())?;
+            self.refresh_stacks()?;
+            self.state.set_config_updated_at(Utc::now())?;
         }
         Ok(())
     }
@@ -108,10 +115,7 @@ impl Refresh {
         }
         let binaries: Vec<BinaryPackage> =
             Self::fetch_bins()?.into_iter().map(Into::into).collect();
-        let binaries_len = binaries.len();
         self.state.set_binaries(binaries)?;
-
-        println!("Total binaries: {}", binaries_len);
         Ok(())
     }
 
@@ -153,8 +157,39 @@ impl Refresh {
                 p
             })
             .collect();
-        println!("Total processes: {}", processes.len());
         self.state.set_processes(processes)?;
+
+        Ok(())
+    }
+
+    fn refresh_stacks(&self) -> Result<()> {
+        let mut default_stack = None;
+        let stacks: HashMap<String, Stack> = if let Some(jocker_config) = ConfigFile::load()? {
+            if let Some(config_default_stack) = jocker_config.default.and_then(|d| d.stack) {
+                default_stack = Some(config_default_stack);
+            }
+
+            let mut stacks: HashMap<String, Stack> = HashMap::new();
+            let mut inherits: HashMap<String, HashSet<String>> = HashMap::new();
+            for (stack_name, config_stack) in jocker_config.stacks {
+                stacks.insert(
+                    stack_name.clone(),
+                    Stack {
+                        name: stack_name.clone(),
+                        processes: config_stack.processes,
+                    },
+                );
+                inherits.insert(stack_name, config_stack.inherits);
+            }
+            stacks
+        } else {
+            HashMap::new()
+        };
+        // TODO : Resolve inheritance
+        // TODO : Validate inherited stacks existence
+        // TODO : Validate processes existence
+        self.state.set_stacks(stacks.values().cloned().collect())?;
+        self.state.set_default_stack(&default_stack)?;
 
         Ok(())
     }

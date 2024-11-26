@@ -33,7 +33,11 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [x] Refresh process config when `jocker.yaml` is updated
 - [ ] Split project into different crates
 - [ ] Have an UI
-- [ ] Handle `stack` keyword in config
+- [x] Handle `stack` keyword in config
+- [ ] Check references behind `stack` keyword
+- [ ] Handle `stack.inherits` keyword in config
 - [x] Correctly show logs while building
 - [ ] Correctly show both stdout and stderr of a running process
+- [ ] When showing all logs, group logs per service before streaming them
 - [ ] Correctly stop child processes
+- [ ] Command to wipe project state

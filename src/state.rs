@@ -14,8 +14,8 @@ use rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{Process, ProcessSql, ProcessState, JOCKER},
-    error::{Error, InnerError, Result},
+    common::{Process, ProcessSql, ProcessState, Stack, JOCKER},
+    error::{lock_error, Error, InnerError, Result},
     export_info::{BinaryPackage, BinaryPackageSql},
 };
 
@@ -23,32 +23,48 @@ const DB_FILE: &str = "db.sqlite3";
 const METADATA_TABLE_NAME: &str = "metadata";
 const METADATA_TABLE_INIT_SQL: &str = r#"
     CREATE TABLE metadata (
-        id BIGINT PRIMARY KEY,
+        id                  BIGINT PRIMARY KEY,
         binaries_updated_at DATETIME,
-        processes_updated_at DATETIME
+        config_updated_at   DATETIME,
+        default_stack       TEXT REFERENCES stack(name) ON DELETE SET NULL
     )
 "#;
-const BINARIES_TABLE_NAME: &str = "binary";
-const BINARIES_TABLE_INIT_SQL: &str = r#"
+const BINARY_TABLE_NAME: &str = "binary";
+const BINARY_TABLE_INIT_SQL: &str = r#"
     CREATE TABLE binary (
-        name TEXT PRIMARY KEY,
-        id TEXT NOT NULL
+        name  TEXT PRIMARY KEY,
+        id    TEXT NOT NULL
     )
 "#;
 const LOGS_FILE: &str = "logs.txt";
 const LOG_PROCESS_PREFIX: &str = "log_";
 const LOG_PROCESS_SUFFIX: &str = ".txt";
-const PROCESSES_TABLE_NAME: &str = "process";
-const PROCESSES_TABLE_INIT_SQL: &str = r#"
+const PROCESS_TABLE_NAME: &str = "process";
+const PROCESS_TABLE_INIT_SQL: &str = r#"
     CREATE TABLE process (
-        name TEXT PRIMARY KEY,
-        binary TEXT NOT NULL,
-        status TEXT NOT NULL,
-        pid INTEGER,
-        args JSONB,
-        cargo_args JSONB,
-        env JSONB
+        name        TEXT PRIMARY KEY,
+        binary      TEXT NOT NULL,
+        status      TEXT NOT NULL,
+        pid         INTEGER,
+        args        JSONB,
+        cargo_args  JSONB,
+        env         JSONB
     )
+"#;
+const STACK_TABLE_NAME: &str = "stack";
+const STACK_TABLE_INIT_SQL: &str = r#"
+    CREATE TABLE stack (
+        name    TEXT PRIMARY KEY
+    )
+"#;
+const REL_STACK_PROCESS_TABLE_NAME: &str = "rel_stack_process";
+const REL_STACK_PROCESS_TABLE_INIT_SQL: &str = r#"
+    CREATE TABLE rel_stack_process (
+        stack_name    TEXT REFERENCES stack(name) ON DELETE CASCADE,
+        process_name  TEXT REFERENCES process(name) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_stack_name   ON rel_stack_process (stack_name);
+    CREATE INDEX idx_process_name ON rel_stack_process (process_name);
 "#;
 
 pub struct State {
@@ -56,6 +72,7 @@ pub struct State {
     filename_logs: String,
     file_lock: RwLock<()>,
     db: Arc<Mutex<Connection>>,
+    current_stack: Arc<Mutex<Option<String>>>,
 }
 
 impl State {
@@ -66,6 +83,7 @@ impl State {
             filename_logs,
             file_lock: RwLock::new(()),
             db: Arc::new(Mutex::new(db_connection)),
+            current_stack: Arc::new(Mutex::new(None)),
         };
         state.refresh()?;
         Ok(state)
@@ -82,10 +100,7 @@ impl State {
     }
 
     pub fn get_elapsed_since_last_binaries_update(&self) -> Result<u64> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         let mut stmt = db.prepare(&format!(
             r#"
                 SELECT binaries_updated_at
@@ -109,14 +124,11 @@ impl State {
             .try_into()?)
     }
 
-    pub fn get_elapsed_since_last_processes_update(&self) -> Result<u64> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+    pub fn get_elapsed_since_last_config_update(&self) -> Result<u64> {
+        let db = self.db.lock().map_err(lock_error)?;
         let mut stmt = db.prepare(&format!(
             r#"
-                SELECT processes_updated_at
+                SELECT config_updated_at
                 FROM {METADATA_TABLE_NAME}
                 LIMIT 1
             "#
@@ -138,10 +150,7 @@ impl State {
     }
 
     pub fn set_binaries_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         db.execute(
             &format!(
                 r#"
@@ -157,19 +166,16 @@ impl State {
         Ok(())
     }
 
-    pub fn set_processes_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+    pub fn set_config_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
+        let db = self.db.lock().map_err(lock_error)?;
         db.execute(
             &format!(
                 r#"
-                    INSERT INTO {METADATA_TABLE_NAME} (id, processes_updated_at)
+                    INSERT INTO {METADATA_TABLE_NAME} (id, config_updated_at)
                     VALUES ($1, $2)
                     ON CONFLICT(id)
                     DO UPDATE SET
-                        processes_updated_at = excluded.processes_updated_at
+                        config_updated_at = excluded.config_updated_at
                 "#,
             ),
             (0, date),
@@ -178,10 +184,7 @@ impl State {
     }
 
     pub fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         let mut stmt = db.prepare(
             r#"
                 SELECT name, id
@@ -202,15 +205,12 @@ impl State {
     }
 
     pub fn set_binaries(&self, binaries: Vec<BinaryPackage>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
 
         db.execute(
             &format!(
                 r#"
-                    DELETE FROM {BINARIES_TABLE_NAME}
+                    DELETE FROM {BINARY_TABLE_NAME}
                 "#
             ),
             [],
@@ -219,7 +219,7 @@ impl State {
             db.execute(
                 &format!(
                     r#"
-                        INSERT INTO {BINARIES_TABLE_NAME} (name, id)
+                        INSERT INTO {BINARY_TABLE_NAME} (name, id)
                         VALUES ($1, $2)
                     "#
                 ),
@@ -233,15 +233,23 @@ impl State {
     ///
     /// If [`process_names`] is empty, returns all processes
     pub fn filter_processes(&self, process_names: &[String]) -> Result<Vec<Process>> {
-        if process_names.is_empty() {
+        let current_stack = self.get_current_stack()?;
+        let expected_processes: Vec<String> = if !process_names.is_empty() {
+            process_names.to_owned()
+        } else if let Some(stack) = current_stack {
+            self.get_stack(&stack)?.processes.into_iter().collect()
+        } else {
+            Vec::with_capacity(0)
+        };
+        if expected_processes.is_empty() {
             return self.get_processes();
         }
         let processes: Vec<Process> = self
             .get_processes()?
             .into_iter()
-            .filter(|process| process_names.contains(&process.name))
+            .filter(|process| expected_processes.contains(&process.name))
             .collect();
-        if process_names.len() != processes.len() {
+        if expected_processes.len() != processes.len() {
             let mut process_names: HashSet<String> = process_names.iter().cloned().collect();
             for process in processes {
                 process_names.remove(&process.name);
@@ -254,10 +262,7 @@ impl State {
     }
 
     pub fn get_processes(&self) -> Result<Vec<Process>> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         let mut stmt = db.prepare(
             r#"
                 SELECT name, binary, status, pid, args, cargo_args, env
@@ -283,15 +288,12 @@ impl State {
     }
 
     pub fn set_processes(&self, processes: Vec<Process>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
 
         db.execute(
             &format!(
                 r#"
-                    DELETE FROM {PROCESSES_TABLE_NAME}
+                    DELETE FROM {PROCESS_TABLE_NAME}
                 "#
             ),
             [],
@@ -300,7 +302,7 @@ impl State {
             db.execute(
                 &format!(
                     r#"
-                        INSERT INTO {PROCESSES_TABLE_NAME} (name, binary, status, pid, args, cargo_args, env)
+                        INSERT INTO {PROCESS_TABLE_NAME} (name, binary, status, pid, args, cargo_args, env)
                         VALUES ($1, $2, $3, $4, $5, $6, $7)
                     "#
                 ),
@@ -319,14 +321,11 @@ impl State {
     }
 
     pub fn set_status(&self, process_name: &str, status: ProcessState) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         db.execute(
             &format!(
                 r#"
-                    UPDATE {PROCESSES_TABLE_NAME}
+                    UPDATE {PROCESS_TABLE_NAME}
                     SET status = ?2
                     WHERE name = ?1
                 "#
@@ -337,20 +336,128 @@ impl State {
     }
 
     pub fn set_pid(&self, process_name: &str, pid: Option<i32>) -> Result<()> {
-        let db = self
-            .db
-            .lock()
-            .map_err(|e| Error::new(InnerError::Lock(e.to_string())))?;
+        let db = self.db.lock().map_err(lock_error)?;
         db.execute(
             &format!(
                 r#"
-                    UPDATE {PROCESSES_TABLE_NAME}
+                    UPDATE {PROCESS_TABLE_NAME}
                     SET pid = ?2
                     WHERE name = ?1
                 "#
             ),
             (process_name, pid),
         )?;
+        Ok(())
+    }
+
+    pub fn get_current_stack(&self) -> Result<Option<String>> {
+        Ok(self.current_stack.lock().map_err(lock_error)?.clone())
+    }
+
+    pub fn get_default_stack(&self) -> Result<Option<String>> {
+        let db = self.db.lock().map_err(lock_error)?;
+        let mut stmt = db.prepare(&format!(
+            r#"
+                SELECT default_stack
+                FROM {METADATA_TABLE_NAME}
+                WHERE id = $1
+                LIMIT 1
+            "#,
+        ))?;
+        Ok(stmt
+            .query_row([0], |row| row.get::<usize, String>(0))
+            .optional()?)
+    }
+
+    pub fn get_stack(&self, stack: &str) -> Result<Stack> {
+        let db = self.db.lock().map_err(lock_error)?;
+        let name = db
+            .prepare(&format!(
+                r#"
+                    SELECT name
+                    FROM {STACK_TABLE_NAME}
+                    WHERE name = $1
+                    LIMIT 1
+                "#,
+            ))?
+            .query_row([stack], |row| row.get::<usize, String>(0))
+            .optional()?
+            .ok_or_else(|| Error::new(InnerError::StackNotFound(stack.to_owned())))?;
+        let processes: HashSet<String> = db
+            .prepare(&format!(
+                r#"
+                    SELECT process_name
+                    FROM {REL_STACK_PROCESS_TABLE_NAME}
+                    WHERE stack_name = $1
+                "#,
+            ))?
+            .query_map([stack], |row| row.get::<usize, String>(0))?
+            .flat_map(std::result::Result::ok)
+            .collect();
+        Ok(Stack { name, processes })
+    }
+
+    pub fn set_current_stack(&self, stack: &Option<String>) -> Result<()> {
+        if let Some(stack) = stack {
+            *self.current_stack.lock().map_err(lock_error)? = Some(self.get_stack(stack)?.name);
+        } else {
+            *self.current_stack.lock().map_err(lock_error)? = self.get_default_stack()?;
+        };
+
+        Ok(())
+    }
+
+    pub fn set_default_stack(&self, stack: &Option<String>) -> Result<()> {
+        let db = self.db.lock().map_err(lock_error)?;
+        db.execute(
+            &format!(
+                r#"
+                    INSERT INTO {METADATA_TABLE_NAME} (id, default_stack)
+                    VALUES ($1, $2)
+                    ON CONFLICT(id)
+                    DO UPDATE SET
+                        default_stack = excluded.default_stack
+                "#,
+            ),
+            (0, stack),
+        )?;
+        Ok(())
+    }
+
+    pub fn set_stacks(&self, stacks: Vec<Stack>) -> Result<()> {
+        let db = self.db.lock().map_err(lock_error)?;
+
+        db.execute(
+            &format!(
+                r#"
+                    DELETE FROM {STACK_TABLE_NAME}
+                "#
+            ),
+            [],
+        )?;
+        for stack in stacks {
+            db.execute(
+                &format!(
+                    r#"
+                        INSERT INTO {STACK_TABLE_NAME} (name)
+                        VALUES ($1)
+                    "#
+                ),
+                [&stack.name],
+            )?;
+            for process in stack.processes {
+                println!("{}: {process}", &stack.name);
+                db.execute(
+                    &format!(
+                        r#"
+                        INSERT INTO {REL_STACK_PROCESS_TABLE_NAME} (stack_name, process_name)
+                        VALUES ($1, $2)
+                    "#
+                    ),
+                    (&stack.name, process),
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -464,8 +571,14 @@ impl State {
         let database_file = Self::get_or_create_state_file(project_dir, filename)?;
         let conn = Connection::open(database_file)?;
         Self::init_db(&conn, METADATA_TABLE_NAME, METADATA_TABLE_INIT_SQL)?;
-        Self::init_db(&conn, BINARIES_TABLE_NAME, BINARIES_TABLE_INIT_SQL)?;
-        Self::init_db(&conn, PROCESSES_TABLE_NAME, PROCESSES_TABLE_INIT_SQL)?;
+        Self::init_db(&conn, BINARY_TABLE_NAME, BINARY_TABLE_INIT_SQL)?;
+        Self::init_db(&conn, PROCESS_TABLE_NAME, PROCESS_TABLE_INIT_SQL)?;
+        Self::init_db(&conn, STACK_TABLE_NAME, STACK_TABLE_INIT_SQL)?;
+        Self::init_db(
+            &conn,
+            REL_STACK_PROCESS_TABLE_NAME,
+            REL_STACK_PROCESS_TABLE_INIT_SQL,
+        )?;
         Ok(conn)
     }
 
