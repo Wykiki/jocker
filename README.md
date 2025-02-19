@@ -35,7 +35,7 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [ ] Have an UI
 - [x] Handle `stack` keyword in config
 - [ ] Check references behind `stack` keyword
-- [ ] Handle `stack.inherits` keyword in config
+- [x] Handle `stack.inherits` keyword in config
 - [x] Correctly show logs while building
 - [ ] Correctly show both stdout and stderr of a running process
 - [ ] When showing all logs, group logs per service before streaming them

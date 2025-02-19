@@ -182,6 +182,7 @@ pub fn tabled_display_option<T: Display>(value: &Option<T>) -> String {
 pub struct Stack {
     pub name: String,
     pub processes: HashSet<String>,
+    pub inherited_processes: HashSet<String>,
 }
 
 // CONFIG
@@ -219,7 +220,7 @@ pub struct ConfigProcessDefault {
     pub cargo_args: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ConfigStack {
     #[serde(default)]
     pub inherits: HashSet<String>,

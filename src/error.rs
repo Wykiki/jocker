@@ -75,6 +75,10 @@ pub enum InnerError {
     ProcessNotFound(Vec<String>),
     #[error("ps error")]
     Ps(String),
+    #[error("Recursion deepness too high")]
+    RecursionDeepnessTooHigh,
+    #[error("Recursion loop")]
+    RecursionLoop,
     #[error("Stack not found error")]
     StackNotFound(String),
     #[error("Start stage error")]

@@ -394,7 +394,11 @@ impl State {
             .query_map([stack], |row| row.get::<usize, String>(0))?
             .flat_map(std::result::Result::ok)
             .collect();
-        Ok(Stack { name, processes })
+        Ok(Stack {
+            name,
+            processes,
+            inherited_processes: Default::default(),
+        })
     }
 
     pub fn set_current_stack(&self, stack: &Option<String>) -> Result<()> {
@@ -445,8 +449,11 @@ impl State {
                 ),
                 [&stack.name],
             )?;
-            for process in stack.processes {
-                println!("{}: {process}", &stack.name);
+            for process in stack
+                .processes
+                .iter()
+                .chain(stack.inherited_processes.iter())
+            {
                 db.execute(
                     &format!(
                         r#"

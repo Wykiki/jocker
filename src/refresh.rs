@@ -9,11 +9,13 @@ use std::{
 use chrono::Utc;
 
 use crate::{
-    common::{ConfigFile, Exec, Process, Stack},
+    common::{ConfigFile, ConfigStack, Exec, Process, Stack},
     error::{Error, InnerError, Result},
     export_info::{BinaryPackage, ExportInfoMinimal, SerializedPackage, TargetKind},
     state::State,
 };
+
+const MAX_RECURSION_LEVEL: u8 = 10;
 
 #[derive(Debug, PartialEq)]
 pub struct RefreshArgs {
@@ -164,34 +166,78 @@ impl Refresh {
 
     fn refresh_stacks(&self) -> Result<()> {
         let mut default_stack = None;
-        let stacks: HashMap<String, Stack> = if let Some(jocker_config) = ConfigFile::load()? {
+        let stacks = if let Some(jocker_config) = ConfigFile::load()? {
             if let Some(config_default_stack) = jocker_config.default.and_then(|d| d.stack) {
                 default_stack = Some(config_default_stack);
             }
-
             let mut stacks: HashMap<String, Stack> = HashMap::new();
-            let mut inherits: HashMap<String, HashSet<String>> = HashMap::new();
+            let config_stacks = jocker_config.stacks.clone();
+
             for (stack_name, config_stack) in jocker_config.stacks {
                 stacks.insert(
                     stack_name.clone(),
                     Stack {
                         name: stack_name.clone(),
                         processes: config_stack.processes,
+                        inherited_processes: Default::default(),
                     },
                 );
-                inherits.insert(stack_name, config_stack.inherits);
+                let inherited_processes = Self::recurse_inherited_processes(
+                    0,
+                    &config_stack.inherits,
+                    &config_stacks,
+                    &mut HashSet::new(),
+                    HashSet::new(),
+                )?;
+                stacks
+                    .get_mut(&stack_name)
+                    .ok_or_else(|| Error::new(InnerError::StackNotFound(stack_name.to_owned())))
+                    .map(|stack| stack.inherited_processes = inherited_processes)?;
             }
             stacks
         } else {
             HashMap::new()
         };
-        // TODO : Resolve inheritance
-        // TODO : Validate inherited stacks existence
-        // TODO : Validate processes existence
+        if let Some(default_stack) = default_stack.as_ref() {
+            if !stacks.contains_key(default_stack) {
+                return Err(Error::new(InnerError::StackNotFound(
+                    default_stack.to_owned(),
+                )));
+            }
+        }
         self.state.set_stacks(stacks.values().cloned().collect())?;
         self.state.set_default_stack(&default_stack)?;
 
         Ok(())
+    }
+
+    fn recurse_inherited_processes(
+        recursion_level: u8,
+        stack_names: &HashSet<String>,
+        stacks: &HashMap<String, ConfigStack>,
+        browsed_stacks: &mut HashSet<String>,
+        mut inherited_processes: HashSet<String>,
+    ) -> Result<HashSet<String>> {
+        if recursion_level > MAX_RECURSION_LEVEL {
+            return Err(Error::new(InnerError::RecursionDeepnessTooHigh));
+        }
+        for stack_name in stack_names {
+            if !browsed_stacks.insert(stack_name.to_owned()) {
+                return Err(Error::new(InnerError::RecursionLoop));
+            }
+            let stack = stacks
+                .get(stack_name)
+                .ok_or_else(|| Error::new(InnerError::StackNotFound(stack_name.to_owned())))?;
+            inherited_processes.extend(stack.processes.clone().into_iter());
+            inherited_processes = Self::recurse_inherited_processes(
+                recursion_level + 1,
+                &stack.inherits,
+                stacks,
+                browsed_stacks,
+                inherited_processes,
+            )?;
+        }
+        Ok(inherited_processes)
     }
 }
 
