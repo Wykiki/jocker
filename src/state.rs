@@ -429,6 +429,13 @@ impl State {
     }
 
     pub fn set_stacks(&self, stacks: Vec<Stack>) -> Result<()> {
+        let processes: HashSet<String> = self
+            .get_processes()?
+            .iter()
+            .map(|p| p.name.to_owned())
+            .collect();
+
+        // Lock after getting processes to avoid deadlock
         let db = self.db.lock().map_err(lock_error)?;
 
         db.execute(
@@ -440,6 +447,18 @@ impl State {
             [],
         )?;
         for stack in stacks {
+            let stack_processes = stack
+                .processes
+                .iter()
+                .chain(stack.inherited_processes.iter());
+            let missing_processes: Vec<String> = stack_processes
+                .clone()
+                .filter(|&stack_process| !processes.contains(stack_process))
+                .cloned()
+                .collect();
+            if !missing_processes.is_empty() {
+                return Err(Error::new(InnerError::ProcessNotFound(missing_processes)));
+            }
             db.execute(
                 &format!(
                     r#"
@@ -449,11 +468,7 @@ impl State {
                 ),
                 [&stack.name],
             )?;
-            for process in stack
-                .processes
-                .iter()
-                .chain(stack.inherited_processes.iter())
-            {
+            for process in stack_processes {
                 db.execute(
                     &format!(
                         r#"

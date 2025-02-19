@@ -31,12 +31,12 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [x] Reconcile process status at each CLI call
 - [x] Automatically refresh process list when project workspace is updated
 - [x] Refresh process config when `jocker.yaml` is updated
-- [ ] Split project into different crates
-- [ ] Have an UI
 - [x] Handle `stack` keyword in config
-- [ ] Check references behind `stack` keyword
+- [x] Check references behind `stack` keyword
 - [x] Handle `stack.inherits` keyword in config
 - [x] Correctly show logs while building
+- [ ] Split project into different crates
+- [ ] Have an UI
 - [ ] Correctly show both stdout and stderr of a running process
 - [ ] When showing all logs, group logs per service before streaming them
 - [ ] Correctly stop child processes
