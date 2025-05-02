@@ -1,15 +1,22 @@
-[package]
-name = "jocker"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
 version = "0.4.0"
+authors = ["wykiki@proton.me"]
 edition = "2021"
 license = "MIT"
 readme = "README.md"
 repository = "https://gitlab.com/wykiki/jocker"
+rust-version = "1.86.0"
 description = """
 Run your monorepo binaries locally with ease !
 """
 
-[dependencies]
+[workspace.dependencies]
+jocker-lib = { path = "./crates/jocker-lib", version = "0.0.0" }
+
 argh = "0.1.12"
 chrono = { version = "0.4.38", features = ["std"] }
 dotenvy = "0.15.7"
@@ -27,7 +34,11 @@ serde_json = "1.0.133"
 serde_yml = "0.0.12"
 sha2 = "0.10.8"
 tabled = "0.17.0"
+tempfile = "3.19.1"
 thiserror = "2.0.3"
 tokio = { version = "1.41.1", features = ["full", "rt"] }
 toml = "0.8.19"
 url = { version = "2.5.4", features = ["serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

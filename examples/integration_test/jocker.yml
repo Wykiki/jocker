@@ -1,0 +1,51 @@
+# Default settings that may be applied to everything
+default:
+  # Default stack to be used when no stack options is provided on CLI
+  stack: minimal
+  # Default process options that will be applied to all processes
+  process:
+    # Currently available process options :
+    # - args -> Arguments given to binary
+    # - binary -> Project binary to use
+    # - cargo_args -> Arguments given to cargo build
+    # - env -> Environment variables provided to binary
+    cargo_args:
+      - --all-features
+      - --color=always
+
+# Stacks definition, to operate over multiple processes
+stacks:
+  minimal:
+    # Must reference a valid process name
+    processes:
+      - eris
+      - harmonia
+  full:
+    # Must reference a valid stack name, not implemented yet
+    inherits:
+      - minimal
+    processes:
+      - ares
+      - athena
+
+# Processes definition, to define wanted processes and their options
+processes:
+  ares:
+    args:
+      - --weapon
+      - ${WEAPON}
+      - --location
+      - ${LOCATION}
+    env:
+      WEAPON: sword
+  athena:
+    args:
+      - --weapon=${WEAPON}
+      - --location=${LOCATION}
+    binary: ares
+    env:
+      WEAPON: ${ATHENA_WEAPON}
+  eris:
+    cargo_args:
+      - --all-features
+  harmonia:

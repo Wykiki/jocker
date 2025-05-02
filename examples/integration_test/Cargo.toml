@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [ "ares",
+  "common",
+  "eris",
+  "harmonia",
+]
+
+[workspace.package]
+authors = ["Wykiki <wykiki@wyki.io>"]
+edition = "2021"
+publish = false
+rust-version = "1.79.0"
+
+[workspace.dependencies]
+fastrand = "2.3.0"
+
+common = { path = "common" }
