@@ -32,6 +32,7 @@ semver = { version = "1.0.23", features = ["serde"] }
 serde = { version = "1.0.215", features = ["rc"] }
 serde_json = "1.0.133"
 serde_yml = "0.0.12"
+schemars = "0.8.22"
 sha2 = "0.10.8"
 tabled = "0.17.0"
 tempfile = "3.19.1"

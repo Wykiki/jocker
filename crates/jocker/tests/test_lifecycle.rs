@@ -82,7 +82,6 @@ async fn start_log_stop_process_stack() {
     let ps_running_output = ps_running_output.unwrap();
     let ps_stopped_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
 
-    dbg!(&ps_running_output);
     assert_eq!(&ps_running_output[0].name, "ares");
     assert_eq!(&ps_running_output[0].status, &ProcessState::Running);
     assert_eq!(&ps_running_output[1].name, "athena");

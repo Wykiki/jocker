@@ -15,10 +15,8 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
     command::cargo::{BinaryPackage, BinaryPackageSql, Cargo},
-    common::{
-        ConfigFile, ConfigStack, Process, ProcessSql, ProcessState, Stack, JOCKER,
-        MAX_RECURSION_LEVEL,
-    },
+    common::{Process, ProcessSql, ProcessState, Stack, JOCKER, MAX_RECURSION_LEVEL},
+    config::{ConfigFile, ConfigStack},
     database::Database,
     error::{lock_error, Error, InnerError, Result},
 };

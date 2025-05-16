@@ -41,3 +41,5 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [ ] When showing all logs, group logs per service before streaming them
 - [ ] Correctly stop child processes
 - [ ] Command to wipe project state
+- [ ] Validate config file with https://docs.rs/jsonschema/latest/jsonschema/ or similar
+

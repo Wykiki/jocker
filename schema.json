@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigFile",
+  "type": "object",
+  "required": [
+    "processes"
+  ],
+  "properties": {
+    "default": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ConfigDefault"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "processes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ConfigProcess"
+      }
+    },
+    "stacks": {
+      "default": {},
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ConfigStack"
+      }
+    }
+  },
+  "definitions": {
+    "ConfigDefault": {
+      "type": "object",
+      "properties": {
+        "process": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ConfigProcessDefault"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stack": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ConfigProcess": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "binary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cargo_args": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ConfigProcessDefault": {
+      "type": "object",
+      "properties": {
+        "cargo_args": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ConfigStack": {
+      "type": "object",
+      "properties": {
+        "inherits": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "processes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

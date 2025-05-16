@@ -1,15 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    fs::File,
-    io::BufReader,
-    path::Path,
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::error::{Error, InnerError, Result};
+use crate::{
+    config::ConfigProcess,
+    error::{Error, InnerError, Result},
+};
 
 pub const JOCKER: &str = "jocker";
 pub(crate) const MAX_RECURSION_LEVEL: u8 = 10;
@@ -178,58 +178,4 @@ pub struct Stack {
     pub name: String,
     pub processes: HashSet<String>,
     pub inherited_processes: HashSet<String>,
-}
-
-// CONFIG
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ConfigFile {
-    pub default: Option<ConfigDefault>,
-    #[serde(default)]
-    pub stacks: HashMap<String, ConfigStack>,
-    pub processes: HashMap<String, ConfigProcess>,
-}
-
-impl ConfigFile {
-    pub fn load(target_dir: &Path) -> Result<Option<Self>> {
-        let filepath = target_dir.join("jocker.yml");
-        if !filepath.exists() {
-            return Ok(None);
-        }
-        let file = File::open(filepath)?;
-        let reader = BufReader::new(file);
-        let res = serde_yml::from_reader(reader)?;
-        Ok(res)
-    }
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct ConfigDefault {
-    pub stack: Option<String>,
-    pub process: Option<ConfigProcessDefault>,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct ConfigProcessDefault {
-    #[serde(default)]
-    pub cargo_args: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct ConfigStack {
-    #[serde(default)]
-    pub inherits: HashSet<String>,
-    #[serde(default)]
-    pub processes: HashSet<String>,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct ConfigProcess {
-    pub binary: Option<String>,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub cargo_args: Vec<String>,
-    #[serde(default)]
-    pub env: HashMap<String, String>,
 }
