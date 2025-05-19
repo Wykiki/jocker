@@ -102,7 +102,7 @@ async fn run(
         }
     }
 
-    if !args.follow || process.status == ProcessState::Stopped {
+    if !args.follow || process.state == ProcessState::Stopped {
         return Ok(());
     }
 

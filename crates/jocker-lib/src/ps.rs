@@ -13,7 +13,7 @@ pub struct PsArgs {
 
 pub struct PsOutput {
     pub name: String,
-    pub status: ProcessState,
+    pub state: ProcessState,
     pub pid: Option<u32>,
 }
 
@@ -21,7 +21,7 @@ impl From<Process> for PsOutput {
     fn from(value: Process) -> Self {
         Self {
             name: value.name,
-            status: value.status,
+            state: value.state,
             pid: value.pid,
         }
     }

@@ -756,6 +756,7 @@ dependencies = [
  "serde_yml",
  "sha2",
  "tabled",
+ "tempfile",
  "thiserror",
  "tokio",
  "toml",

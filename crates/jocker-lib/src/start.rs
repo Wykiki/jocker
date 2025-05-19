@@ -61,7 +61,7 @@ impl Start {
                 println!("Error while building crates: {e}");
                 for process in processes {
                     self.state
-                        .set_status(process.name(), ProcessState::Stopped)?;
+                        .set_state(process.name(), ProcessState::Stopped)?;
                 }
             }
         }
@@ -69,7 +69,7 @@ impl Start {
     }
 
     pub fn run(&self, process: Process) -> Result<()> {
-        if process.status != ProcessState::Stopped && process.status != ProcessState::Building {
+        if process.state != ProcessState::Stopped && process.state != ProcessState::Building {
             println!("Process is already started: {}", process.name());
             return Ok(());
         }
@@ -97,7 +97,7 @@ impl Exec<()> for Start {
         let processes = self.state.filter_processes(&self.args.processes)?;
         for process in &processes {
             self.state
-                .set_status(process.name(), ProcessState::Building)?;
+                .set_state(process.name(), ProcessState::Building)?;
         }
         self.build(processes.as_slice()).await?;
         for process in processes {
@@ -124,7 +124,7 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
     }
     let env = env;
 
-    state.set_status(process.name(), ProcessState::Running)?;
+    state.set_state(process.name(), ProcessState::Running)?;
 
     let mut run = Command::new(format!("./target/debug/{}", process.binary()));
     run.current_dir(state.get_target_dir());
@@ -150,7 +150,7 @@ fn run_child(state: Arc<State>, process: Process) -> Result<()> {
         state.log("Unable to take ownership of run stderr")?;
     }
     run_process.wait()?;
-    state.set_status(process.name(), ProcessState::Stopped)?;
+    state.set_state(process.name(), ProcessState::Stopped)?;
     Ok(())
 }
 

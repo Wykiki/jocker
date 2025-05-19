@@ -25,7 +25,7 @@ pub trait Exec<T> {
 pub struct Process {
     pub name: String,
     pub binary: String,
-    pub status: ProcessState,
+    pub state: ProcessState,
     pub pid: Option<Pid>,
     pub args: Vec<String>,
     pub cargo_args: Vec<String>,
@@ -37,7 +37,7 @@ impl Process {
         Self {
             name: name.to_string(),
             binary: binary.to_string(),
-            status: ProcessState::Stopped,
+            state: ProcessState::Stopped,
             pid: None,
             args: Vec::new(),
             cargo_args: Vec::new(),
@@ -89,7 +89,7 @@ impl Ord for Process {
             core::cmp::Ordering::Equal => {}
             ord => return ord,
         }
-        match self.status.cmp(&other.status) {
+        match self.state.cmp(&other.state) {
             core::cmp::Ordering::Equal => {}
             ord => return ord,
         }
@@ -114,7 +114,7 @@ impl TryFrom<ProcessSql> for Process {
         Ok(Self {
             name: value.name,
             binary: value.binary,
-            status: value.status.try_into()?,
+            state: value.state.try_into()?,
             pid: value.pid,
             args: serde_json::from_value(value.args)?,
             cargo_args: serde_json::from_value(value.cargo_args)?,
@@ -166,7 +166,7 @@ impl TryFrom<String> for ProcessState {
 pub struct ProcessSql {
     pub name: String,
     pub binary: String,
-    pub status: String,
+    pub state: String,
     pub pid: Option<u32>,
     pub args: Value,
     pub cargo_args: Value,
@@ -178,4 +178,13 @@ pub struct Stack {
     pub name: String,
     pub processes: HashSet<String>,
     pub inherited_processes: HashSet<String>,
+}
+
+impl Stack {
+    pub fn get_all_processes(&self) -> HashSet<&String> {
+        self.processes
+            .iter()
+            .chain(self.inherited_processes.iter())
+            .collect()
+    }
 }

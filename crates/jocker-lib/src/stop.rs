@@ -52,7 +52,7 @@ impl Exec<()> for Stop {
 
 async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> {
     let process_name = process.name().to_string();
-    if process.status == ProcessState::Stopped {
+    if process.state == ProcessState::Stopped {
         println!("Process is already stopped: {process_name}");
         return Ok(());
     }
@@ -65,7 +65,7 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
         };
         kill_parent_and_children(KillArgs { pid, signal })?;
     }
-    state.set_status(&process_name, ProcessState::Stopped)?;
+    state.set_state(&process_name, ProcessState::Stopped)?;
     state.set_pid(&process_name, None)?;
     println!("Process {process_name} stopped");
     Ok(())

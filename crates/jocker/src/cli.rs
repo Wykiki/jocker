@@ -95,7 +95,7 @@ impl From<PsArgsCli> for PsArgs {
 #[tabled(rename_all = "UPPERCASE")]
 pub struct PsOutputCli {
     name: String,
-    status: ProcessState,
+    state: ProcessState,
     #[tabled(display_with = "tabled_display_option")]
     pid: Option<u32>,
 }
@@ -104,7 +104,7 @@ impl From<PsOutput> for PsOutputCli {
     fn from(value: PsOutput) -> Self {
         Self {
             name: value.name,
-            status: value.status,
+            state: value.state,
             pid: value.pid,
         }
     }

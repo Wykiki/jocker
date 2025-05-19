@@ -33,3 +33,4 @@ toml = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }

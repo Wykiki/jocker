@@ -35,15 +35,15 @@ async fn start_log_stop_default() {
     let ps_stopped_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
 
     assert_eq!(&ps_running_output[0].name, "eris");
-    assert_eq!(&ps_running_output[0].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[0].state, &ProcessState::Running);
     assert_eq!(&ps_running_output[1].name, "harmonia");
-    assert_eq!(&ps_running_output[1].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[1].state, &ProcessState::Running);
     assert_eq!(ps_running_output.len(), 2);
 
     assert_eq!(&ps_stopped_output[0].name, "eris");
-    assert_eq!(&ps_stopped_output[0].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[0].state, &ProcessState::Stopped);
     assert_eq!(&ps_stopped_output[1].name, "harmonia");
-    assert_eq!(&ps_stopped_output[1].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[1].state, &ProcessState::Stopped);
     assert_eq!(ps_stopped_output.len(), 2);
 
     let (mut handles, mut rx) = logs.unwrap();
@@ -83,23 +83,23 @@ async fn start_log_stop_process_stack() {
     let ps_stopped_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
 
     assert_eq!(&ps_running_output[0].name, "ares");
-    assert_eq!(&ps_running_output[0].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[0].state, &ProcessState::Running);
     assert_eq!(&ps_running_output[1].name, "athena");
-    assert_eq!(&ps_running_output[1].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[1].state, &ProcessState::Running);
     assert_eq!(&ps_running_output[2].name, "eris");
-    assert_eq!(&ps_running_output[2].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[2].state, &ProcessState::Running);
     assert_eq!(&ps_running_output[3].name, "harmonia");
-    assert_eq!(&ps_running_output[3].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[3].state, &ProcessState::Running);
     assert_eq!(ps_running_output.len(), 4);
 
     assert_eq!(&ps_stopped_output[0].name, "ares");
-    assert_eq!(&ps_stopped_output[0].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[0].state, &ProcessState::Stopped);
     assert_eq!(&ps_stopped_output[1].name, "athena");
-    assert_eq!(&ps_stopped_output[1].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[1].state, &ProcessState::Stopped);
     assert_eq!(&ps_stopped_output[2].name, "eris");
-    assert_eq!(&ps_stopped_output[2].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[2].state, &ProcessState::Stopped);
     assert_eq!(&ps_stopped_output[3].name, "harmonia");
-    assert_eq!(&ps_stopped_output[3].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[3].state, &ProcessState::Stopped);
     assert_eq!(ps_stopped_output.len(), 4);
 
     let (mut handles, mut rx) = logs.unwrap();
@@ -164,13 +164,12 @@ async fn start_log_stop_process_stack_filter() {
     .run()
     .unwrap();
 
-    dbg!(&ps_running_output);
     assert_eq!(&ps_running_output[0].name, "athena");
-    assert_eq!(&ps_running_output[0].status, &ProcessState::Running);
+    assert_eq!(&ps_running_output[0].state, &ProcessState::Running);
     assert_eq!(ps_running_output.len(), 1);
 
     assert_eq!(&ps_stopped_output[0].name, "athena");
-    assert_eq!(&ps_stopped_output[0].status, &ProcessState::Stopped);
+    assert_eq!(&ps_stopped_output[0].state, &ProcessState::Stopped);
     assert_eq!(ps_stopped_output.len(), 1);
 
     let (mut handles, mut rx) = logs.unwrap();
