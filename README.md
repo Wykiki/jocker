@@ -9,6 +9,19 @@ you may already know with `docker` CLI.
 **NOTE** : It does not aim to reproduce the exact same behaviour as what
 does `docker`, but stick to its API when relevant.
 
+## Dependencies
+
+`jocker` requires the following external tools to be installed :
+- `cargo` (should be included in your Rust toolchain)
+- `pueue` (`jocker`'s backend to manage processes)
+
+```sh
+# Install Pueue
+cargo install pueue --version
+# Start Pueue daemon
+pueued -d
+```
+
 ## Installation
 
 ```sh
@@ -35,11 +48,11 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [x] Check references behind `stack` keyword
 - [x] Handle `stack.inherits` keyword in config
 - [x] Correctly show logs while building
-- [ ] Split project into different crates
+- [x] Split project into different crates
 - [ ] Have an UI
-- [ ] Correctly show both stdout and stderr of a running process
+- [x] Correctly show both stdout and stderr of a running process
 - [ ] When showing all logs, group logs per service before streaming them
-- [ ] Correctly stop child processes
+- [x] Correctly stop child processes
 - [ ] Command to wipe project state
 - [ ] Validate config file with https://docs.rs/jsonschema/latest/jsonschema/ or similar
 

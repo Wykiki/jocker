@@ -1,28 +1,25 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fmt::Display,
-    fs::{canonicalize, create_dir_all, File, OpenOptions},
+    fs::{canonicalize, create_dir_all, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::Command,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use chrono::{DateTime, Utc};
+use tokio::fs::remove_dir_all;
 
 use crate::{
-    command::cargo::{BinaryPackage, Cargo},
+    command::{
+        cargo::{BinaryPackage, Cargo},
+        pueue::Pueue,
+    },
     common::{Process, ProcessState, Stack, JOCKER, MAX_RECURSION_LEVEL},
     config::{ConfigFile, ConfigStack},
     database::Database,
     error::{lock_error, Error, InnerError, Result},
 };
-
-const LOGS_FILE: &str = "logs.txt";
-const LOG_PROCESS_PREFIX: &str = "log_";
-const LOG_PROCESS_SUFFIX: &str = ".txt";
 
 #[derive(Debug, PartialEq)]
 pub struct StateArgs {
@@ -33,10 +30,9 @@ pub struct StateArgs {
 pub struct State {
     project_dir: String,
     target_dir: PathBuf,
-    filename_logs: String,
-    file_lock: RwLock<()>,
     db: Database,
     current_stack: Arc<Mutex<Option<String>>>,
+    scheduler: Pueue,
 }
 
 impl State {
@@ -46,29 +42,29 @@ impl State {
         target_dir: Option<impl Into<PathBuf>>,
     ) -> Result<Self> {
         let target_dir = target_dir.map(Into::into).unwrap_or(canonicalize(".")?);
-        let (project_dir, filename_logs) = Self::get_or_create_state_dir(&target_dir)?;
+        let (project_id, project_dir) = Self::get_or_create_state_dir(&target_dir)?;
         let db = Database::new(&project_dir)?;
+        let scheduler = Pueue::new(&project_id).await?;
         let state = Self {
             project_dir,
             target_dir,
-            filename_logs,
-            file_lock: RwLock::new(()),
             db,
             current_stack: Arc::new(Mutex::new(None)),
+            scheduler,
         };
         state.refresh(refresh).await?;
         state.set_current_stack(&stack)?;
         Ok(state)
     }
 
-    pub fn filename_logs(&self) -> &str {
-        &self.filename_logs
+    pub(crate) fn scheduler(&self) -> &Pueue {
+        &self.scheduler
     }
 
-    pub fn filename_log_process(&self, process: &Process) -> String {
-        let project_dir = &self.project_dir;
-        let process_name = process.name();
-        format!("{project_dir}/{LOG_PROCESS_PREFIX}{process_name}{LOG_PROCESS_SUFFIX}")
+    pub async fn clean(self) -> Result<()> {
+        remove_dir_all(self.project_dir).await?;
+        self.scheduler.clean().await?;
+        Ok(())
     }
 
     pub fn get_elapsed_since_last_binaries_update(&self) -> Result<u64> {
@@ -170,7 +166,8 @@ impl State {
         self.db.set_process_state(process_name, state)
     }
 
-    pub fn set_pid(&self, process_name: &str, pid: Option<i32>) -> Result<()> {
+    pub fn set_pid(&self, process_name: &str, pid: Option<usize>) -> Result<()> {
+        let pid = pid.map(i32::try_from).transpose()?;
         self.db.set_process_pid(process_name, pid)
     }
 
@@ -182,9 +179,7 @@ impl State {
         if let Some(stack) = stack {
             *self.current_stack.lock().map_err(lock_error)? = Some(self.get_stack(stack)?.name);
         } else {
-            dbg!(11);
             *self.current_stack.lock().map_err(lock_error)? = self.get_default_stack()?;
-            dbg!(12);
         };
 
         Ok(())
@@ -209,11 +204,16 @@ impl State {
     // Refresh
 
     pub async fn refresh(&self, hard: bool) -> Result<()> {
-        let user_pids = Self::get_user_pids()?;
-        self.get_processes()?
-            .into_iter()
-            .map(|process| self.reconcile_pids(process, &user_pids))
-            .collect::<Result<Vec<Process>>>()?;
+        let mut scheduled_process = self.scheduler().processes().await?;
+        for process in self.get_processes()? {
+            if let Some(sp) = scheduled_process.remove(process.name()) {
+                self.set_pid(process.name(), Some(sp.0))?;
+                self.set_state(process.name(), sp.1.into())?;
+            } else {
+                self.set_pid(process.name(), None)?;
+                self.set_state(process.name(), ProcessState::Stopped)?;
+            }
+        }
 
         if hard || self.needs_to_refresh_binaries()? {
             self.refresh_binaries(hard).await?;
@@ -221,9 +221,7 @@ impl State {
         }
         if hard || self.needs_to_refresh_config()? {
             self.refresh_processes()?;
-            dbg!(21);
             self.refresh_stacks()?;
-            dbg!(22);
             self.set_config_updated_at(Utc::now())?;
         }
 
@@ -401,124 +399,32 @@ impl State {
         Ok(inherited_processes)
     }
 
-    pub fn log<T>(&self, content: T) -> Result<()>
-    where
-        T: Display,
-    {
-        let _lock = self
-            .file_lock
-            .write()
-            .expect("Poisoned RwLock, cannot recover");
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .truncate(false)
-            .open(self.filename_logs())
-            .map_err(Error::with_context(InnerError::Filesystem))?;
-        writeln!(file, "{} : {content}", Utc::now().to_rfc3339())?;
-        Ok(())
-    }
-
-    pub fn log_process<T>(&self, process: &Process, content: T) -> Result<()>
-    where
-        T: Read,
-    {
-        let _lock = self
-            .file_lock
-            .write()
-            .expect("Poisoned RwLock, cannot recover");
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .truncate(false)
-            .open(self.filename_log_process(process))
-            .map_err(Error::with_context(InnerError::Filesystem))?;
-        let mut buf = BufReader::new(content);
-        loop {
-            let bytes = match buf.fill_buf() {
-                Ok(buf) => {
-                    file.write_all(buf).expect("Couldn't write");
-
-                    buf.len()
-                }
-                other => panic!("Some better error handling here... {:?}", other),
-            };
-
-            if bytes == 0 {
-                // Seems less-than-ideal; should be some way of
-                // telling if the child has actually exited vs just
-                // not outputting anything.
-                break;
-            }
-            buf.consume(bytes);
-        }
-        Ok(())
+    fn get_project_id(target_dir: &PathBuf) -> String {
+        let mut hasher = DefaultHasher::new();
+        target_dir.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
     }
 
     fn get_or_create_state_dir(target_dir: &PathBuf) -> Result<(String, String)> {
-        let project_dir = Self::get_or_create_project_dir(target_dir)?;
+        let (project_id, project_dir) = Self::get_or_create_project_dir(target_dir)?;
 
-        Ok((
-            project_dir.clone(),
-            Self::get_or_create_state_file(&project_dir, LOGS_FILE)?,
-        ))
+        Ok((project_id, project_dir.clone()))
     }
 
-    fn get_or_create_project_dir(target_dir: &PathBuf) -> Result<String> {
-        let pwd = target_dir;
-
-        let mut hasher = DefaultHasher::new();
-        pwd.hash(&mut hasher);
-        let hashed_pwd = format!("{:x}", hasher.finish());
+    fn get_or_create_project_dir(target_dir: &PathBuf) -> Result<(String, String)> {
+        let project_id = Self::get_project_id(target_dir);
 
         let home =
             env::var("HOME").map_err(|e| Error::with_context(InnerError::Env(e.to_string()))(e))?;
         let state_dir =
             env::var("XDG_STATE_HOME").unwrap_or_else(|_| format!("{home}/.local/state"));
 
-        let project_dir = format!("{state_dir}/{JOCKER}/{hashed_pwd}");
+        let project_dir = format!("{state_dir}/{JOCKER}/{project_id}");
         let project_dir_path = Path::new(&project_dir);
         if !project_dir_path.exists() {
             create_dir_all(project_dir_path)
                 .map_err(Error::with_context(InnerError::Filesystem))?;
         }
-        Ok(project_dir)
-    }
-
-    fn get_or_create_state_file(project_dir: &str, filename: &str) -> Result<String> {
-        let file = format!("{project_dir}/{filename}");
-        let file_path = Path::new(&file);
-        if !file_path.exists() {
-            File::create_new(file_path).map_err(Error::with_context(InnerError::Filesystem))?;
-        }
-        Ok(file)
-    }
-
-    fn reconcile_pids(&self, mut process: Process, user_pids: &HashSet<u32>) -> Result<Process> {
-        if let Some(pid) = process.pid() {
-            if user_pids.get(pid).is_none() {
-                self.set_state(process.name(), ProcessState::Stopped)?;
-                process.state = ProcessState::Stopped;
-                self.set_pid(process.name(), None)?;
-                process.pid = None;
-            }
-        }
-        Ok(process)
-    }
-
-    fn get_user_pids() -> Result<HashSet<u32>> {
-        let mut run = Command::new("ps");
-        let ps_output = run.arg("--no-headers").arg("o").arg("pid").output()?;
-        if !ps_output.status.success() {
-            return Err(Error::new(InnerError::Ps(String::from_utf8(
-                ps_output.stderr,
-            )?)));
-        }
-        Ok(String::from_utf8(ps_output.stdout)?
-            .lines()
-            .flat_map(|line| line.trim().parse())
-            .collect())
+        Ok((project_id, project_dir))
     }
 }

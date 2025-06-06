@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
 };
 
+use pueue_lib::TaskStatus;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -128,7 +129,7 @@ pub enum ProcessState {
     Stopped,
     Building,
     Running,
-    Healthy,
+    Unknown,
 }
 
 impl Default for ProcessState {
@@ -143,9 +144,19 @@ impl Display for ProcessState {
             ProcessState::Stopped => "stopped",
             ProcessState::Building => "building",
             ProcessState::Running => "running",
-            ProcessState::Healthy => "healthy",
+            ProcessState::Unknown => "unknown",
         };
         write!(f, "{str}")
+    }
+}
+
+impl From<TaskStatus> for ProcessState {
+    fn from(value: TaskStatus) -> Self {
+        match value {
+            TaskStatus::Running { .. } => Self::Running,
+            TaskStatus::Paused { .. } | TaskStatus::Done { .. } => Self::Stopped,
+            _ => Self::Unknown,
+        }
     }
 }
 
@@ -157,7 +168,7 @@ impl TryFrom<String> for ProcessState {
             "stopped" => Self::Stopped,
             "building" => Self::Building,
             "running" => Self::Running,
-            "healthy" => Self::Healthy,
+            "unknown" => Self::Unknown,
             _ => Err(Error::new(InnerError::Parse(value)))?,
         })
     }

@@ -1,16 +1,13 @@
-use std::{io::SeekFrom, sync::Arc};
+use std::sync::Arc;
 
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::{
-    fs::File,
-    io::{AsyncBufReadExt, AsyncSeekExt, BufReader},
     sync::mpsc::{self, Receiver, Sender},
     task::JoinSet,
 };
 
 use crate::{
     common::{Exec, Process, ProcessState},
-    error::Result,
+    error::{Error, InnerError, Result},
 };
 
 use crate::state::State;
@@ -82,24 +79,41 @@ async fn run(
 ) -> Result<()> {
     let process_name = process.name();
     // get file
-    let path = state.filename_log_process(&process);
+    // let path = state.filename_log_process(&process);
 
     // get pos to end of file
-    let f = File::open(&path).await?;
+    // let f = File::open(&path).await?;
     let process_prefix = if args.process_prefix {
         format!("{process_name:max_process_name_len$} > ")
     } else {
         "".to_string()
     };
     if !args.tail {
-        let reader = BufReader::new(f);
-        let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            log_tx
-                .send(format!("{process_prefix}{}", line))
-                .await
-                .unwrap();
-        }
+        // let reader = BufReader::new(f);
+        // let mut lines = reader.lines();
+        state
+            .scheduler()
+            .logs(
+                log_tx,
+                &process_prefix,
+                process
+                    .pid()
+                    .ok_or_else(|| {
+                        Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
+                            "PID missing for log".to_owned(),
+                        )))
+                    })?
+                    .try_into()?,
+                None,
+                args.follow,
+            )
+            .await?;
+        // while let Ok(Some(line)) = lines.next_line().await {
+        //     log_tx
+        //         .send(format!("{process_prefix}{}", line))
+        //         .await
+        //         .unwrap();
+        // }
     }
 
     if !args.follow || process.state == ProcessState::Stopped {
@@ -107,41 +121,41 @@ async fn run(
     }
 
     // set up watcher
-    let mut f = File::open(&path).await?;
-    let mut pos = f.metadata().await?.len();
-    f.seek(SeekFrom::Start(pos)).await?;
-    pos = f.metadata().await?.len();
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-    watcher.watch(path.as_ref(), RecursiveMode::NonRecursive)?;
-
-    // watch
-    for res in rx {
-        match res {
-            Ok(_event) => {
-                // ignore any event that didn't change the pos
-                if f.metadata().await?.len() == pos {
-                    continue;
-                }
-
-                // read from pos to end of file
-                f.seek(std::io::SeekFrom::Start(pos)).await?;
-
-                // update post to end of file
-                pos = f.metadata().await?.len();
-
-                let reader = BufReader::new(f.try_clone().await?);
-                let mut lines = reader.lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    log_tx
-                        .send(format!("{process_prefix}{}", line,))
-                        .await
-                        .unwrap();
-                }
-            }
-            Err(error) => println!("{error:?}"),
-        }
-    }
+    // let mut f = File::open(&path).await?;
+    // let mut pos = f.metadata().await?.len();
+    // f.seek(SeekFrom::Start(pos)).await?;
+    // pos = f.metadata().await?.len();
+    // let (tx, rx) = std::sync::mpsc::channel();
+    // let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
+    // watcher.watch(path.as_ref(), RecursiveMode::NonRecursive)?;
+    //
+    // // watch
+    // for res in rx {
+    //     match res {
+    //         Ok(_event) => {
+    //             // ignore any event that didn't change the pos
+    //             if f.metadata().await?.len() == pos {
+    //                 continue;
+    //             }
+    //
+    //             // read from pos to end of file
+    //             f.seek(std::io::SeekFrom::Start(pos)).await?;
+    //
+    //             // update post to end of file
+    //             pos = f.metadata().await?.len();
+    //
+    //             let reader = BufReader::new(f.try_clone().await?);
+    //             let mut lines = reader.lines();
+    //             while let Ok(Some(line)) = lines.next_line().await {
+    //                 log_tx
+    //                     .send(format!("{process_prefix}{}", line,))
+    //                     .await
+    //                     .unwrap();
+    //             }
+    //         }
+    //         Err(error) => println!("{error:?}"),
+    //     }
+    // }
 
     Ok(())
 }

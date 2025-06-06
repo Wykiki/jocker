@@ -1,11 +1,6 @@
-use std::{
-    collections::HashMap,
-    process::{exit, Command, Stdio},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use dotenvy::dotenv_iter;
-use fork::{fork, Fork};
 use once_cell::sync::OnceCell;
 use regex::Regex;
 
@@ -38,7 +33,6 @@ impl Start {
             .flat_map(|p| p.cargo_args())
             .map(String::as_str)
             .collect();
-        dbg!(self.state.get_target_dir());
         match Cargo::build(
             self.state.get_target_dir(),
             binaries.as_slice(),
@@ -68,25 +62,43 @@ impl Start {
         Ok(())
     }
 
-    pub fn run(&self, process: Process) -> Result<()> {
+    pub async fn run(&self, process: Process) -> Result<()> {
         if process.state != ProcessState::Stopped && process.state != ProcessState::Building {
             println!("Process is already started: {}", process.name());
             return Ok(());
         }
         let process_name = process.name().to_string();
         println!("Starting process {process_name} ...");
-        match fork() {
-            Ok(Fork::Parent(child_pid)) => self.state.set_pid(process.name(), Some(child_pid))?,
-            Ok(Fork::Child) => {
-                if let Err(err) = run_child(self.state.clone(), process) {
-                    self.state.log(err).unwrap_or_else(|e| {
-                        panic!("Unable to log for process {}: {e}", process_name)
-                    })
-                }
-                exit(0);
+        let mut env: HashMap<String, String> = HashMap::new();
+        if let Ok(dotenv) = dotenv_iter() {
+            for (key, val) in dotenv.flatten() {
+                env.insert(key, val);
             }
-            Err(e) => self.state.log(format!("Unable to fork: {e}"))?,
         }
+        for (key, val) in process.env.iter() {
+            env.insert(key.to_string(), val.to_string());
+        }
+        let env = env;
+
+        let mut command = vec![];
+        command.push(format!("./target/debug/{}", process.binary()));
+        for arg in process.args() {
+            command.push(envsubst(arg, &env));
+        }
+
+        let pid = self
+            .state
+            .scheduler()
+            .start(
+                process_name.clone(),
+                command.join(" "),
+                self.state.get_target_dir().to_path_buf(),
+                env,
+            )
+            .await?;
+        self.state
+            .set_state(process.name(), ProcessState::Running)?;
+        self.state.set_pid(process.name(), Some(pid))?;
         println!("Process {process_name} started");
         Ok(())
     }
@@ -102,56 +114,13 @@ impl Exec<()> for Start {
         self.build(processes.as_slice()).await?;
         for process in processes {
             let process_name = process.name().to_string();
-            if let Err(e) = self.run(process) {
+            if let Err(e) = self.run(process).await {
                 println!("Error while starting process {process_name}: {e}")
             }
         }
 
         Ok(())
     }
-}
-
-/// It is NOT possible to use tokio in a forked process
-fn run_child(state: Arc<State>, process: Process) -> Result<()> {
-    let mut env: HashMap<String, String> = HashMap::new();
-    if let Ok(dotenv) = dotenv_iter() {
-        for (key, val) in dotenv.flatten() {
-            env.insert(key, val);
-        }
-    }
-    for (key, val) in process.env.iter() {
-        env.insert(key.to_string(), val.to_string());
-    }
-    let env = env;
-
-    state.set_state(process.name(), ProcessState::Running)?;
-
-    let mut run = Command::new(format!("./target/debug/{}", process.binary()));
-    run.current_dir(state.get_target_dir());
-    run.stdout(Stdio::piped()).stderr(Stdio::piped());
-    for arg in process.args() {
-        run.arg(envsubst(arg, &env));
-    }
-    for (key, val) in env.iter() {
-        run.env(key, val);
-    }
-    state.log(format!("{}: Run command: {:?}", process.name(), run))?;
-    let mut run_process = run.spawn().map_err(Error::with_context(InnerError::Start(
-        "Unable to run crate".to_string(),
-    )))?;
-    if let Some(stdout) = run_process.stdout.take() {
-        state.log_process(&process, stdout)?;
-    } else {
-        state.log("Unable to take ownership of run stdout")?;
-    }
-    if let Some(stderr) = run_process.stderr.take() {
-        state.log_process(&process, stderr)?;
-    } else {
-        state.log("Unable to take ownership of run stderr")?;
-    }
-    run_process.wait()?;
-    state.set_state(process.name(), ProcessState::Stopped)?;
-    Ok(())
 }
 
 static ENVSUBST_REGEX: OnceCell<Regex> = OnceCell::new();

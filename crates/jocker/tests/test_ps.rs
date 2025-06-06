@@ -1,4 +1,4 @@
-use common::setup;
+use common::{clean, setup};
 use jocker_lib::ps::{Ps, PsArgs};
 
 mod common;
@@ -15,7 +15,8 @@ async fn ps_default() {
         1
     );
     assert_eq!(ps_output.len(), 2);
-    drop(tempdir);
+
+    clean(state, tempdir).await.unwrap();
 }
 
 #[tokio::test]
@@ -33,7 +34,8 @@ async fn ps_default_with_stack() {
     assert_eq!(ps_output.iter().filter(|i| &i.name == "ares").count(), 1);
     assert_eq!(ps_output.iter().filter(|i| &i.name == "athena").count(), 1);
     assert_eq!(ps_output.len(), 4);
-    drop(tempdir);
+
+    clean(state, tempdir).await.unwrap();
 }
 
 #[tokio::test]
@@ -51,7 +53,8 @@ async fn ps_filter() {
 
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);
     assert_eq!(ps_output.len(), 1);
-    drop(tempdir);
+
+    clean(state, tempdir).await.unwrap();
 }
 
 #[tokio::test]
@@ -71,5 +74,6 @@ async fn ps_filter_with_stack() {
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);
     assert_eq!(ps_output.iter().filter(|i| &i.name == "athena").count(), 1);
     assert_eq!(ps_output.len(), 2);
-    drop(tempdir);
+
+    clean(state, tempdir).await.unwrap();
 }

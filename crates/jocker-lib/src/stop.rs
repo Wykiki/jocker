@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::task::JoinSet;
 
 use crate::{
-    command::kill::{kill_parent_and_children, KillArgs, KillSignal},
     common::{Exec, Process, ProcessState},
     error::Result,
     state::State,
@@ -58,12 +57,10 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
     }
     if let Some(pid) = process.pid {
         println!("Stopping process {process_name} ...");
-        let signal = if args.kill {
-            KillSignal::Kill
-        } else {
-            KillSignal::default()
-        };
-        kill_parent_and_children(KillArgs { pid, signal })?;
+        state
+            .scheduler()
+            .stop(usize::try_from(pid)?, args.kill)
+            .await?;
     }
     state.set_state(&process_name, ProcessState::Stopped)?;
     state.set_pid(&process_name, None)?;

@@ -1,6 +1,6 @@
 use std::{fs::canonicalize, path::Path, process::Stdio, sync::Arc};
 
-use jocker_lib::state::State;
+use jocker_lib::{error::Result, state::State};
 use tempfile::{tempdir, TempDir};
 use tokio::process::Child;
 
@@ -31,6 +31,14 @@ pub async fn setup_cargo(path: impl AsRef<Path>) -> tokio::io::Result<Child> {
     build.current_dir(path);
     let build = build.spawn()?;
     Ok(build)
+}
+
+pub async fn clean(state: Arc<State>, tempdir: TempDir) -> Result<()> {
+    if let Ok(state) = Arc::try_unwrap(state) {
+        state.clean().await.unwrap();
+    }
+    drop(tempdir);
+    Ok(())
 }
 
 pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {

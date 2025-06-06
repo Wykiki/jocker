@@ -1,6 +1,4 @@
-use std::time::Duration;
-
-use common::setup;
+use common::{clean, setup};
 use jocker_lib::{
     common::{Exec as _, ProcessState},
     logs::{Logs, LogsArgs},
@@ -8,7 +6,6 @@ use jocker_lib::{
     start::{Start, StartArgs},
     stop::{Stop, StopArgs},
 };
-use tokio::time::sleep;
 
 mod common;
 
@@ -21,7 +18,6 @@ async fn start_log_stop_default() {
         .await
         .unwrap();
 
-    sleep(Duration::from_millis(100)).await;
     let ps_running_output = Ps::new(PsArgs::default(), state.clone()).exec().await;
 
     let logs = Logs::new(LogsArgs::default(), state.clone()).run().await;
@@ -56,7 +52,7 @@ async fn start_log_stop_default() {
 
     assert!(logs.len() >= 2);
 
-    drop(tempdir);
+    clean(state, tempdir).await.unwrap();
 }
 
 #[tokio::test]
@@ -69,7 +65,6 @@ async fn start_log_stop_process_stack() {
         .await
         .unwrap();
 
-    sleep(Duration::from_millis(100)).await;
     let ps_running_output = Ps::new(PsArgs::default(), state.clone()).exec().await;
 
     let logs = Logs::new(LogsArgs::default(), state.clone()).run().await;
@@ -112,7 +107,7 @@ async fn start_log_stop_process_stack() {
 
     assert!(logs.len() >= 4);
 
-    drop(tempdir);
+    clean(state, tempdir).await.unwrap();
 }
 
 #[tokio::test]
@@ -131,7 +126,6 @@ async fn start_log_stop_process_stack_filter() {
     .await
     .unwrap();
 
-    sleep(Duration::from_millis(100)).await;
     let ps_running_output = Ps::new(
         PsArgs {
             processes: processes.clone(),
@@ -182,5 +176,5 @@ async fn start_log_stop_process_stack_filter() {
 
     assert!(!logs.is_empty());
 
-    drop(tempdir);
+    clean(state, tempdir).await.unwrap();
 }

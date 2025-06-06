@@ -627,7 +627,6 @@ mod tests {
         let (dir, db) = setup().unwrap();
 
         let stack = db.get_stack("foo").unwrap_err();
-        dbg!(&stack);
         assert!(matches!(stack.inner_error, InnerError::StackNotFound(_)));
 
         let expected_processes = test_processes();
