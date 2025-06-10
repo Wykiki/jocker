@@ -11,4 +11,4 @@ pub mod stop;
 
 pub const JOCKER: &str = "jocker";
 
-pub type Pid = u32;
+pub type Pid = usize;

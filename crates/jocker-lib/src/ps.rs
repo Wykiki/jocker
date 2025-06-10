@@ -4,6 +4,7 @@ use crate::{
     common::{Exec, Process, ProcessState},
     error::Result,
     state::State,
+    Pid,
 };
 
 #[derive(Debug, Default, PartialEq)]
@@ -14,7 +15,7 @@ pub struct PsArgs {
 pub struct PsOutput {
     pub name: String,
     pub state: ProcessState,
-    pub pid: Option<u32>,
+    pub pid: Option<Pid>,
 }
 
 impl From<Process> for PsOutput {
@@ -37,8 +38,8 @@ impl Ps {
         Ps { args, state }
     }
 
-    pub fn run(&self) -> Result<Vec<PsOutput>> {
-        let mut processes = self.state.filter_processes(&self.args.processes)?;
+    pub async fn run(&self) -> Result<Vec<PsOutput>> {
+        let mut processes = self.state.filter_processes(&self.args.processes).await?;
         processes.sort();
         Ok(processes.into_iter().map(PsOutput::from).collect())
     }
@@ -46,6 +47,6 @@ impl Ps {
 
 impl Exec<Vec<PsOutput>> for Ps {
     async fn exec(&self) -> Result<Vec<PsOutput>> {
-        self.run()
+        self.run().await
     }
 }

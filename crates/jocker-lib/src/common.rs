@@ -5,17 +5,15 @@ use std::{
 
 use pueue_lib::TaskStatus;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{
     config::ConfigProcess,
     error::{Error, InnerError, Result},
+    Pid,
 };
 
 pub const JOCKER: &str = "jocker";
 pub(crate) const MAX_RECURSION_LEVEL: u8 = 10;
-
-pub type Pid = u32;
 
 #[expect(async_fn_in_trait)]
 pub trait Exec<T> {
@@ -108,22 +106,6 @@ impl PartialOrd for Process {
     }
 }
 
-impl TryFrom<ProcessSql> for Process {
-    type Error = Error;
-
-    fn try_from(value: ProcessSql) -> std::prelude::v1::Result<Self, Self::Error> {
-        Ok(Self {
-            name: value.name,
-            binary: value.binary,
-            state: value.state.try_into()?,
-            pid: value.pid,
-            args: serde_json::from_value(value.args)?,
-            cargo_args: serde_json::from_value(value.cargo_args)?,
-            env: serde_json::from_value(value.env)?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub enum ProcessState {
     Stopped,
@@ -172,16 +154,6 @@ impl TryFrom<String> for ProcessState {
             _ => Err(Error::new(InnerError::Parse(value)))?,
         })
     }
-}
-
-pub struct ProcessSql {
-    pub name: String,
-    pub binary: String,
-    pub state: String,
-    pub pid: Option<u32>,
-    pub args: Value,
-    pub cargo_args: Value,
-    pub env: Value,
 }
 
 #[derive(Clone, Debug)]

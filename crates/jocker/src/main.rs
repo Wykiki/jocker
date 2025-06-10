@@ -26,7 +26,8 @@ pub async fn main() -> Result<()> {
         CliSubCommand::Logs(args) => Logs::new(args.into(), state.clone()).exec().await?,
         CliSubCommand::Ps(args) => {
             let ps: Vec<PsOutputCli> = Ps::new(args.into(), state.clone())
-                .run()?
+                .run()
+                .await?
                 .into_iter()
                 .map(Into::into)
                 .collect();

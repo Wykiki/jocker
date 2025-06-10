@@ -43,6 +43,10 @@ impl Pueue {
         })
     }
 
+    pub fn group(&self) -> &str {
+        &self.group
+    }
+
     pub(crate) async fn client() -> Result<Client> {
         let (settings, _) = Settings::read(&None)?;
         let client = Client::new(settings, true)
@@ -58,6 +62,9 @@ impl Pueue {
         path: PathBuf,
         envs: HashMap<String, String>,
     ) -> Result<usize> {
+        if let Some(process) = self.processes().await?.get(&process_name) {
+            self.remove(process.0).await?;
+        }
         let mut client = self.client.lock().await;
         client
             .send_request(Request::Add(AddRequest {
@@ -81,7 +88,7 @@ impl Pueue {
         drop(client);
         while !matches!(
             self.process_status(&task_id).await?,
-            TaskStatus::Running { .. }
+            Some(TaskStatus::Running { .. })
         ) {
             sleep(Duration::from_millis(100)).await;
         }
@@ -123,18 +130,12 @@ impl Pueue {
         }
     }
 
-    async fn process_status(&self, pid: &usize) -> Result<TaskStatus> {
+    async fn process_status(&self, pid: &usize) -> Result<Option<TaskStatus>> {
         Ok(self
             .processes_by_pid()
             .await?
             .get(pid)
-            .ok_or_else(|| {
-                Error::new(InnerError::Pueue(pueue_lib::Error::Generic(format!(
-                    "Cannot get status of process with pid {pid}"
-                ))))
-            })?
-            .status
-            .clone())
+            .map(|p| p.status.clone()))
     }
 
     pub(crate) async fn logs(
@@ -260,7 +261,26 @@ impl Pueue {
             ))));
         }
         drop(client);
-        while !matches!(self.process_status(&pid).await?, TaskStatus::Done { .. }) {
+        while !matches!(
+            self.process_status(&pid).await?,
+            Some(TaskStatus::Done { .. })
+        ) {
+            sleep(Duration::from_millis(100)).await;
+        }
+        Ok(())
+    }
+
+    async fn remove(&self, pid: usize) -> Result<()> {
+        let mut client = self.client.lock().await;
+        client.send_request(Request::Remove(vec![pid])).await?;
+        let rsp = client.receive_response().await?;
+        if !rsp.success() {
+            return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
+                format!("{:?}", rsp),
+            ))));
+        }
+        drop(client);
+        while self.process_status(&pid).await?.is_some() {
             sleep(Duration::from_millis(100)).await;
         }
         Ok(())

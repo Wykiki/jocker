@@ -5,7 +5,6 @@ use std::{
     hash::Hash,
     path::Path,
     process::Stdio,
-    str::FromStr,
 };
 
 use dotenvy::dotenv_iter;
@@ -136,20 +135,4 @@ impl From<SerializedPackage> for BinaryPackage {
             id: value.id,
         }
     }
-}
-
-impl TryFrom<BinaryPackageSql> for BinaryPackage {
-    type Error = Error;
-
-    fn try_from(value: BinaryPackageSql) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            name: value.name,
-            id: Url::from_str(&value.id)?,
-        })
-    }
-}
-
-pub struct BinaryPackageSql {
-    pub name: String,
-    pub id: String,
 }

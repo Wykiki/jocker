@@ -7,7 +7,10 @@ mod common;
 async fn ps_default() {
     let (state, tempdir) = setup().await;
 
-    let ps_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
+    let ps_output = Ps::new(PsArgs::default(), state.clone())
+        .run()
+        .await
+        .unwrap();
 
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);
     assert_eq!(
@@ -22,9 +25,15 @@ async fn ps_default() {
 #[tokio::test]
 async fn ps_default_with_stack() {
     let (state, tempdir) = setup().await;
-    state.set_current_stack(&Some("full".to_owned())).unwrap();
+    state
+        .set_current_stack(&Some("full".to_owned()))
+        .await
+        .unwrap();
 
-    let ps_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
+    let ps_output = Ps::new(PsArgs::default(), state.clone())
+        .run()
+        .await
+        .unwrap();
 
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);
     assert_eq!(
@@ -49,6 +58,7 @@ async fn ps_filter() {
         state.clone(),
     )
     .run()
+    .await
     .unwrap();
 
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);
@@ -60,7 +70,10 @@ async fn ps_filter() {
 #[tokio::test]
 async fn ps_filter_with_stack() {
     let (state, tempdir) = setup().await;
-    state.set_current_stack(&Some("full".to_owned())).unwrap();
+    state
+        .set_current_stack(&Some("full".to_owned()))
+        .await
+        .unwrap();
 
     let ps_output = Ps::new(
         PsArgs {
@@ -69,6 +82,7 @@ async fn ps_filter_with_stack() {
         state.clone(),
     )
     .run()
+    .await
     .unwrap();
 
     assert_eq!(ps_output.iter().filter(|i| &i.name == "eris").count(), 1);

@@ -100,6 +100,10 @@ pub enum InnerError {
     SerdeYaml(#[from] serde_yml::Error),
     #[error("Sqlite error")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("sqlx error")]
+    Sqlx(#[from] sqlx::Error),
+    #[error("sqlx migration error")]
+    SqlxMigration(#[from] sqlx::migrate::MigrateError),
     #[error("SystemTime error")]
     SystemTime(#[from] std::time::SystemTimeError),
     #[error("TryFromInt error")]

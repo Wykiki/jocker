@@ -97,7 +97,7 @@ pub struct PsOutputCli {
     name: String,
     state: ProcessState,
     #[tabled(display_with = "tabled_display_option")]
-    pid: Option<u32>,
+    pid: Option<usize>,
 }
 
 impl From<PsOutput> for PsOutputCli {

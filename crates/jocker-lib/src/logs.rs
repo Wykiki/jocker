@@ -31,7 +31,7 @@ impl Logs {
     }
 
     pub async fn run(&self) -> Result<(JoinSet<Result<()>>, Receiver<String>)> {
-        let processes = self.state.filter_processes(&self.args.processes)?;
+        let processes = self.state.filter_processes(&self.args.processes).await?;
         let mut handles = JoinSet::new();
         let max_process_name_len = processes.iter().fold(0, |acc, e| {
             if acc < e.name().len() {
@@ -96,14 +96,11 @@ async fn run(
             .logs(
                 log_tx,
                 &process_prefix,
-                process
-                    .pid()
-                    .ok_or_else(|| {
-                        Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                            "PID missing for log".to_owned(),
-                        )))
-                    })?
-                    .try_into()?,
+                process.pid().ok_or_else(|| {
+                    Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
+                        "PID missing for log".to_owned(),
+                    )))
+                })?,
                 None,
                 args.follow,
             )

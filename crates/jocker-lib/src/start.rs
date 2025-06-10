@@ -55,7 +55,8 @@ impl Start {
                 println!("Error while building crates: {e}");
                 for process in processes {
                     self.state
-                        .set_state(process.name(), ProcessState::Stopped)?;
+                        .set_state(process.name(), ProcessState::Stopped)
+                        .await?;
                 }
             }
         }
@@ -97,8 +98,9 @@ impl Start {
             )
             .await?;
         self.state
-            .set_state(process.name(), ProcessState::Running)?;
-        self.state.set_pid(process.name(), Some(pid))?;
+            .set_state(process.name(), ProcessState::Running)
+            .await?;
+        self.state.set_pid(process.name(), Some(pid)).await?;
         println!("Process {process_name} started");
         Ok(())
     }
@@ -106,10 +108,11 @@ impl Start {
 
 impl Exec<()> for Start {
     async fn exec(&self) -> Result<()> {
-        let processes = self.state.filter_processes(&self.args.processes)?;
+        let processes = self.state.filter_processes(&self.args.processes).await?;
         for process in &processes {
             self.state
-                .set_state(process.name(), ProcessState::Building)?;
+                .set_state(process.name(), ProcessState::Building)
+                .await?;
         }
         self.build(processes.as_slice()).await?;
         for process in processes {

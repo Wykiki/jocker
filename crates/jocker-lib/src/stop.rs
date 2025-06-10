@@ -27,7 +27,7 @@ impl Stop {
 
 impl Exec<()> for Stop {
     async fn exec(&self) -> Result<()> {
-        let processes = self.state.filter_processes(&self.args.processes)?;
+        let processes = self.state.filter_processes(&self.args.processes).await?;
         let mut handles = JoinSet::new();
         for process in processes {
             let state = self.state.clone();
@@ -57,13 +57,12 @@ async fn run(state: Arc<State>, process: Process, args: StopArgs) -> Result<()> 
     }
     if let Some(pid) = process.pid {
         println!("Stopping process {process_name} ...");
-        state
-            .scheduler()
-            .stop(usize::try_from(pid)?, args.kill)
-            .await?;
+        state.scheduler().stop(pid, args.kill).await?;
     }
-    state.set_state(&process_name, ProcessState::Stopped)?;
-    state.set_pid(&process_name, None)?;
+    state
+        .set_state(&process_name, ProcessState::Stopped)
+        .await?;
+    state.set_pid(&process_name, None).await?;
     println!("Process {process_name} stopped");
     Ok(())
 }

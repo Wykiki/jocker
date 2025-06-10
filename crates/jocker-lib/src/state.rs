@@ -43,7 +43,7 @@ impl State {
     ) -> Result<Self> {
         let target_dir = target_dir.map(Into::into).unwrap_or(canonicalize(".")?);
         let (project_id, project_dir) = Self::get_or_create_state_dir(&target_dir)?;
-        let db = Database::new(&project_dir)?;
+        let db = Database::new(&project_dir).await?;
         let scheduler = Pueue::new(&project_id).await?;
         let state = Self {
             project_dir,
@@ -53,12 +53,16 @@ impl State {
             scheduler,
         };
         state.refresh(refresh).await?;
-        state.set_current_stack(&stack)?;
+        state.set_current_stack(&stack).await?;
         Ok(state)
     }
 
     pub(crate) fn scheduler(&self) -> &Pueue {
         &self.scheduler
+    }
+
+    pub fn scheduler_group(&self) -> &str {
+        self.scheduler.group()
     }
 
     pub async fn clean(self) -> Result<()> {
@@ -67,8 +71,8 @@ impl State {
         Ok(())
     }
 
-    pub fn get_elapsed_since_last_binaries_update(&self) -> Result<u64> {
-        let date = if let Some(date) = self.db.get_binaries_updated_at()? {
+    pub async fn get_elapsed_since_last_binaries_update(&self) -> Result<u64> {
+        let date = if let Some(date) = self.db.get_binaries_updated_at().await? {
             date
         } else {
             DateTime::UNIX_EPOCH
@@ -80,8 +84,8 @@ impl State {
             .try_into()?)
     }
 
-    pub fn get_elapsed_since_last_config_update(&self) -> Result<u64> {
-        let date = if let Some(date) = self.db.get_config_updated_at()? {
+    pub async fn get_elapsed_since_last_config_update(&self) -> Result<u64> {
+        let date = if let Some(date) = self.db.get_config_updated_at().await? {
             date
         } else {
             DateTime::UNIX_EPOCH
@@ -93,40 +97,36 @@ impl State {
             .try_into()?)
     }
 
-    pub fn set_binaries_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        self.db.set_binaries_updated_at(date)
+    pub async fn set_binaries_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
+        self.db.set_binaries_updated_at(date).await
     }
 
-    pub fn set_config_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        self.db.set_config_updated_at(date)
+    pub async fn set_config_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
+        self.db.set_config_updated_at(date).await
     }
 
     pub fn get_target_dir(&self) -> &Path {
         &self.target_dir
     }
 
-    pub fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
-        let bins_iter = self.db.get_binaries()?;
-        let mut binaries = vec![];
-        for bin in bins_iter {
-            binaries.push(bin.try_into()?);
-        }
-        Ok(binaries)
+    pub async fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
+        self.db.get_binaries().await
     }
 
-    pub fn set_binaries(&self, binaries: &[BinaryPackage]) -> Result<()> {
-        self.db.set_binaries(binaries)
+    pub async fn set_binaries(&self, binaries: &[BinaryPackage]) -> Result<()> {
+        self.db.set_binaries(binaries).await
     }
 
     /// Filter processes list based on given process names
     ///
     /// If [`process_names`] is empty, returns all processes
-    pub fn filter_processes(&self, process_names: &[String]) -> Result<Vec<Process>> {
+    pub async fn filter_processes(&self, process_names: &[String]) -> Result<Vec<Process>> {
         let current_stack = self.get_current_stack()?;
         let expected_processes: Vec<String> = if !process_names.is_empty() {
             process_names.to_owned()
         } else if let Some(stack) = current_stack {
-            self.get_stack(&stack)?
+            self.get_stack(&stack)
+                .await?
                 .get_all_processes()
                 .into_iter()
                 .cloned()
@@ -135,10 +135,11 @@ impl State {
             Vec::with_capacity(0)
         };
         if expected_processes.is_empty() {
-            return self.get_processes();
+            return self.get_processes().await;
         }
         let processes: Vec<Process> = self
-            .get_processes()?
+            .get_processes()
+            .await?
             .into_iter()
             .filter(|process| expected_processes.contains(&process.name))
             .collect();
@@ -154,82 +155,84 @@ impl State {
         Ok(processes)
     }
 
-    pub fn get_processes(&self) -> Result<Vec<Process>> {
-        self.db.get_processes()
+    pub async fn get_processes(&self) -> Result<Vec<Process>> {
+        self.db.get_processes().await
     }
 
-    pub fn set_processes(&self, processes: Vec<Process>) -> Result<()> {
-        self.db.set_processes(&processes)
+    pub async fn set_processes(&self, processes: Vec<Process>) -> Result<()> {
+        self.db.set_processes(&processes).await
     }
 
-    pub fn set_state(&self, process_name: &str, state: ProcessState) -> Result<()> {
-        self.db.set_process_state(process_name, state)
+    pub async fn set_state(&self, process_name: &str, state: ProcessState) -> Result<()> {
+        self.db.set_process_state(process_name, state).await
     }
 
-    pub fn set_pid(&self, process_name: &str, pid: Option<usize>) -> Result<()> {
+    pub async fn set_pid(&self, process_name: &str, pid: Option<usize>) -> Result<()> {
         let pid = pid.map(i32::try_from).transpose()?;
-        self.db.set_process_pid(process_name, pid)
+        self.db.set_process_pid(process_name, pid).await
     }
 
     pub fn get_current_stack(&self) -> Result<Option<String>> {
         Ok(self.current_stack.lock().map_err(lock_error)?.clone())
     }
 
-    pub fn set_current_stack(&self, stack: &Option<String>) -> Result<()> {
+    pub async fn set_current_stack(&self, stack: &Option<String>) -> Result<()> {
         if let Some(stack) = stack {
-            *self.current_stack.lock().map_err(lock_error)? = Some(self.get_stack(stack)?.name);
+            *self.current_stack.lock().map_err(lock_error)? =
+                Some(self.get_stack(stack).await?.name);
         } else {
-            *self.current_stack.lock().map_err(lock_error)? = self.get_default_stack()?;
+            *self.current_stack.lock().map_err(lock_error)? = self.get_default_stack().await?;
         };
 
         Ok(())
     }
 
-    pub fn get_default_stack(&self) -> Result<Option<String>> {
-        self.db.get_default_stack()
+    pub async fn get_default_stack(&self) -> Result<Option<String>> {
+        self.db.get_default_stack().await
     }
 
-    pub fn set_default_stack(&self, stack: &Option<String>) -> Result<()> {
-        self.db.set_default_stack(stack)
+    pub async fn set_default_stack(&self, stack: &Option<String>) -> Result<()> {
+        self.db.set_default_stack(stack).await
     }
 
-    pub fn get_stack(&self, stack: &str) -> Result<Stack> {
-        self.db.get_stack(stack)
+    pub async fn get_stack(&self, stack: &str) -> Result<Stack> {
+        self.db.get_stack(stack).await
     }
 
-    pub fn set_stacks(&self, stacks: &[Stack]) -> Result<()> {
-        self.db.set_stacks(stacks)
+    pub async fn set_stacks(&self, stacks: &[Stack]) -> Result<()> {
+        self.db.set_stacks(stacks).await
     }
 
     // Refresh
 
     pub async fn refresh(&self, hard: bool) -> Result<()> {
         let mut scheduled_process = self.scheduler().processes().await?;
-        for process in self.get_processes()? {
+        for process in self.get_processes().await? {
             if let Some(sp) = scheduled_process.remove(process.name()) {
-                self.set_pid(process.name(), Some(sp.0))?;
-                self.set_state(process.name(), sp.1.into())?;
+                self.set_pid(process.name(), Some(sp.0)).await?;
+                self.set_state(process.name(), sp.1.into()).await?;
             } else {
-                self.set_pid(process.name(), None)?;
-                self.set_state(process.name(), ProcessState::Stopped)?;
+                self.set_pid(process.name(), None).await?;
+                self.set_state(process.name(), ProcessState::Stopped)
+                    .await?;
             }
         }
 
-        if hard || self.needs_to_refresh_binaries()? {
+        if hard || self.needs_to_refresh_binaries().await? {
             self.refresh_binaries(hard).await?;
-            self.set_binaries_updated_at(Utc::now())?;
+            self.set_binaries_updated_at(Utc::now()).await?;
         }
-        if hard || self.needs_to_refresh_config()? {
-            self.refresh_processes()?;
-            self.refresh_stacks()?;
-            self.set_config_updated_at(Utc::now())?;
+        if hard || self.needs_to_refresh_config().await? {
+            self.refresh_processes().await?;
+            self.refresh_stacks().await?;
+            self.set_config_updated_at(Utc::now()).await?;
         }
 
         Ok(())
     }
 
-    fn needs_to_refresh_binaries(&self) -> Result<bool> {
-        let elapsed_since_last_update = self.get_elapsed_since_last_binaries_update()?;
+    async fn needs_to_refresh_binaries(&self) -> Result<bool> {
+        let elapsed_since_last_update = self.get_elapsed_since_last_binaries_update().await?;
         let files = ["./Cargo.toml", "./Cargo.lock"];
         for file in files {
             if Path::new(file).exists()
@@ -246,8 +249,8 @@ impl State {
         Ok(false)
     }
 
-    fn needs_to_refresh_config(&self) -> Result<bool> {
-        let elapsed_since_last_update = self.get_elapsed_since_last_config_update()?;
+    async fn needs_to_refresh_config(&self) -> Result<bool> {
+        let elapsed_since_last_update = self.get_elapsed_since_last_config_update().await?;
         let files = ["./jocker.yml", "./jocker.override.yml"];
         for file in files {
             if Path::new(file).exists()
@@ -277,13 +280,14 @@ impl State {
             return Ok(());
         }
         let binaries: Vec<BinaryPackage> = Self::fetch_bins(self.get_target_dir()).await?;
-        self.set_binaries(&binaries)?;
+        self.set_binaries(&binaries).await?;
         Ok(())
     }
 
-    fn refresh_processes(&self) -> Result<()> {
+    async fn refresh_processes(&self) -> Result<()> {
         let previous_processes: HashMap<String, Process> = self
-            .get_processes()?
+            .get_processes()
+            .await?
             .into_iter()
             .map(|p| (p.name().to_string(), p))
             .collect();
@@ -303,7 +307,8 @@ impl State {
                 }
                 processes
             } else {
-                self.get_binaries()?
+                self.get_binaries()
+                    .await?
                     .into_iter()
                     .map(|b| Process::new(b.name(), b.name()))
                     .collect()
@@ -318,12 +323,12 @@ impl State {
                 p
             })
             .collect();
-        self.set_processes(processes)?;
+        self.set_processes(processes).await?;
 
         Ok(())
     }
 
-    fn refresh_stacks(&self) -> Result<()> {
+    async fn refresh_stacks(&self) -> Result<()> {
         let mut default_stack = None;
         let stacks = if let Some(jocker_config) = ConfigFile::load(self.get_target_dir())? {
             if let Some(config_default_stack) = jocker_config.default.and_then(|d| d.stack) {
@@ -364,8 +369,9 @@ impl State {
                 )));
             }
         }
-        self.set_stacks(stacks.values().cloned().collect::<Vec<Stack>>().as_slice())?;
-        self.set_default_stack(&default_stack)?;
+        self.set_stacks(stacks.values().cloned().collect::<Vec<Stack>>().as_slice())
+            .await?;
+        self.set_default_stack(&default_stack).await?;
 
         Ok(())
     }

@@ -28,6 +28,7 @@ serde_yml = { workspace = true }
 schemars = { workspace = true }
 sha2 = { workspace = true }
 snap = { workspace = true }
+sqlx = { workspace = true }
 tabled = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -17,7 +17,7 @@ does `docker`, but stick to its API when relevant.
 
 ```sh
 # Install Pueue
-cargo install pueue --version
+cargo install pueue --version 4.0.0
 # Start Pueue daemon
 pueued -d
 ```
@@ -25,11 +25,17 @@ pueued -d
 ## Installation
 
 ```sh
+# Setup sqlx db
+cd crates/jocker-lib
+sqlx db create --database-url sqlite:.jocker.db
+sqlx migrate run --database-url sqlite:.jocker.db
+
+# From git
 cargo install --git https://gitlab.com/wykiki/jocker.git jocker
 
 # From sources
 git clone https://gitlab.com/wykiki/jocker.git
-cargo install --offline --path .
+cargo install --offline --path crates/jocker
 ```
 
 ## Wipe state

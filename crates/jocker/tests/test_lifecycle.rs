@@ -6,6 +6,7 @@ use jocker_lib::{
     start::{Start, StartArgs},
     stop::{Stop, StopArgs},
 };
+use pueue_lib::{Client, Request, Response, Settings};
 
 mod common;
 
@@ -28,7 +29,10 @@ async fn start_log_stop_default() {
         .unwrap();
 
     let ps_running_output = ps_running_output.unwrap();
-    let ps_stopped_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
+    let ps_stopped_output = Ps::new(PsArgs::default(), state.clone())
+        .run()
+        .await
+        .unwrap();
 
     assert_eq!(&ps_running_output[0].name, "eris");
     assert_eq!(&ps_running_output[0].state, &ProcessState::Running);
@@ -58,7 +62,10 @@ async fn start_log_stop_default() {
 #[tokio::test]
 async fn start_log_stop_process_stack() {
     let (state, tempdir) = setup().await;
-    state.set_current_stack(&Some("full".to_string())).unwrap();
+    state
+        .set_current_stack(&Some("full".to_string()))
+        .await
+        .unwrap();
 
     Start::new(StartArgs::default(), state.clone())
         .exec()
@@ -75,7 +82,10 @@ async fn start_log_stop_process_stack() {
         .unwrap();
 
     let ps_running_output = ps_running_output.unwrap();
-    let ps_stopped_output = Ps::new(PsArgs::default(), state.clone()).run().unwrap();
+    let ps_stopped_output = Ps::new(PsArgs::default(), state.clone())
+        .run()
+        .await
+        .unwrap();
 
     assert_eq!(&ps_running_output[0].name, "ares");
     assert_eq!(&ps_running_output[0].state, &ProcessState::Running);
@@ -113,7 +123,10 @@ async fn start_log_stop_process_stack() {
 #[tokio::test]
 async fn start_log_stop_process_stack_filter() {
     let (state, tempdir) = setup().await;
-    state.set_current_stack(&Some("full".to_string())).unwrap();
+    state
+        .set_current_stack(&Some("full".to_string()))
+        .await
+        .unwrap();
     let processes = vec!["athena".to_owned()];
 
     Start::new(
@@ -156,6 +169,7 @@ async fn start_log_stop_process_stack_filter() {
         state.clone(),
     )
     .run()
+    .await
     .unwrap();
 
     assert_eq!(&ps_running_output[0].name, "athena");
@@ -175,6 +189,62 @@ async fn start_log_stop_process_stack_filter() {
     }
 
     assert!(!logs.is_empty());
+
+    clean(state, tempdir).await.unwrap();
+}
+
+#[tokio::test]
+async fn start_after_stop() {
+    let (state, tempdir) = setup().await;
+
+    Start::new(StartArgs::default(), state.clone())
+        .exec()
+        .await
+        .unwrap();
+
+    let ps_run_1 = Ps::new(PsArgs::default(), state.clone()).exec().await;
+
+    Stop::new(StopArgs::default(), state.clone())
+        .exec()
+        .await
+        .unwrap();
+
+    Start::new(StartArgs::default(), state.clone())
+        .exec()
+        .await
+        .unwrap();
+
+    Stop::new(StopArgs::default(), state.clone())
+        .exec()
+        .await
+        .unwrap();
+
+    let ps_run_1 = ps_run_1.unwrap();
+    let ps_run_2 = Ps::new(PsArgs::default(), state.clone())
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(&ps_run_1[0].name, "eris");
+    assert_eq!(&ps_run_1[0].state, &ProcessState::Running);
+    assert_eq!(&ps_run_1[1].name, "harmonia");
+    assert_eq!(&ps_run_1[1].state, &ProcessState::Running);
+    assert_eq!(ps_run_1.len(), 2);
+
+    assert_eq!(&ps_run_2[0].name, "eris");
+    assert_eq!(&ps_run_2[0].state, &ProcessState::Stopped);
+    assert_eq!(&ps_run_2[1].name, "harmonia");
+    assert_eq!(&ps_run_2[1].state, &ProcessState::Stopped);
+    assert_eq!(ps_run_2.len(), 2);
+
+    let (settings, _) = Settings::read(&None).unwrap();
+    let mut client = Client::new(settings, true).await.unwrap();
+    client.send_request(Request::Status).await.unwrap();
+    if let Response::Status(status) = client.receive_response().await.unwrap() {
+        assert_eq!(status.task_ids_in_group(state.scheduler_group()).len(), 2);
+    } else {
+        panic!();
+    };
 
     clean(state, tempdir).await.unwrap();
 }
