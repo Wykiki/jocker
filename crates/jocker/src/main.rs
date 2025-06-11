@@ -11,7 +11,7 @@ use jocker_lib::start::Start;
 use jocker_lib::state::State;
 use jocker_lib::stop::Stop;
 
-use jocker_lib::error::Result;
+use jocker_lib::error::{Error, InnerError, Result};
 use tabled::settings::Style;
 use tabled::Table;
 
@@ -23,6 +23,16 @@ pub async fn main() -> Result<()> {
     let cli: Cli = argh::from_env();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
     match cli.sub_command {
+        CliSubCommand::Clean(_) => {
+            Arc::try_unwrap(state)
+                .map_err(|_| {
+                    Error::new(InnerError::Lock(
+                        "Unable to unwrap Arc to clean state".to_owned(),
+                    ))
+                })?
+                .clean()
+                .await?
+        }
         CliSubCommand::Logs(args) => Logs::new(args.into(), state.clone()).exec().await?,
         CliSubCommand::Ps(args) => {
             let ps: Vec<PsOutputCli> = Ps::new(args.into(), state.clone())

@@ -59,6 +59,6 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [x] Correctly show both stdout and stderr of a running process
 - [ ] When showing all logs, group logs per service before streaming them
 - [x] Correctly stop child processes
-- [ ] Command to wipe project state
+- [x] Command to wipe project state
 - [ ] Validate config file with https://docs.rs/jsonschema/latest/jsonschema/ or similar
 

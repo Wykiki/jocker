@@ -34,6 +34,7 @@ pub struct Cli {
 #[argh(subcommand)]
 pub enum CliSubCommand {
     Ui(UiArgs),
+    Clean(CleanArgsCli),
     Logs(LogsArgsCli),
     Ps(PsArgsCli),
     Start(StartArgsCli),
@@ -44,6 +45,11 @@ pub enum CliSubCommand {
 /// First subcommand.
 #[argh(subcommand, name = "ui")]
 pub struct UiArgs {}
+
+#[derive(Clone, Debug, FromArgs, PartialEq)]
+/// Clean jocker state and resources
+#[argh(subcommand, name = "clean")]
+pub struct CleanArgsCli {}
 
 #[derive(Clone, Debug, FromArgs, PartialEq)]
 /// Start processes
