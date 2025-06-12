@@ -12,4 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - run: cargo sqlx db create --database-url sqlite:crates/jocker-lib
+      - run: cargo sqlx migrate run --database-url sqlite:crates/jocker-lib --source crates/jocker-lib/migrations
       - run: cargo test --all-features
