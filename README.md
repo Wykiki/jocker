@@ -1,6 +1,6 @@
 # Jocker
 
-Manage your mono-repo binaries locally at ease !
+Rust mono-repo binaries runner.
 
 This project aims at giving you anything you need to easily run your
 binaries in a Rust mono-repo setup, giving you a similar experience to what
