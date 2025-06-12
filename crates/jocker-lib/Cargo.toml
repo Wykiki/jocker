@@ -1,11 +1,11 @@
 [package]
 name = "jocker-lib"
-version = "0.0.0"
 
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+version.workspace = true
 
 [lints]
 workspace = true
