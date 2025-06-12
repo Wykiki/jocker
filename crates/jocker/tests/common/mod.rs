@@ -5,11 +5,8 @@ use tempfile::{tempdir, TempDir};
 use tokio::process::Child;
 
 pub async fn setup() -> (Arc<State>, TempDir) {
-    let project_path = canonicalize(format!(
-        "{}/../../examples/integration_test",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-    .unwrap();
+    let project_path =
+        canonicalize(format!("{}/../../examples", env!("CARGO_MANIFEST_DIR"))).unwrap();
     setup_cargo(&project_path)
         .await
         .unwrap()
