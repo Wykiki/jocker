@@ -14,6 +14,7 @@ use crate::{
 
 pub const JOCKER: &str = "jocker";
 pub(crate) const MAX_RECURSION_LEVEL: u8 = 10;
+pub const JOCKER_ENV_STACK: &str = "JOCKER_STACK";
 
 #[expect(async_fn_in_trait)]
 pub trait Exec<T> {

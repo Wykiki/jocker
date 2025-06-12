@@ -15,7 +15,7 @@ use crate::{
         cargo::{BinaryPackage, Cargo},
         pueue::Pueue,
     },
-    common::{Process, ProcessState, Stack, JOCKER, MAX_RECURSION_LEVEL},
+    common::{Process, ProcessState, Stack, JOCKER, JOCKER_ENV_STACK, MAX_RECURSION_LEVEL},
     config::{ConfigFile, ConfigStack},
     database::Database,
     error::{lock_error, Error, InnerError, Result},
@@ -180,6 +180,9 @@ impl State {
         if let Some(stack) = stack {
             *self.current_stack.lock().map_err(lock_error)? =
                 Some(self.get_stack(stack).await?.name);
+        } else if let Ok(stack) = env::var(JOCKER_ENV_STACK) {
+            *self.current_stack.lock().map_err(lock_error)? =
+                Some(self.get_stack(&stack).await?.name);
         } else {
             *self.current_stack.lock().map_err(lock_error)? = self.get_default_stack().await?;
         };
