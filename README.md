@@ -2,12 +2,9 @@
 
 Manage your mono-repo binaries locally at ease !
 
-This projects aims at giving you anything you need to easily run your
-binaries in a mono-repo setup, giving you an similar experience to what
+This project aims at giving you anything you need to easily run your
+binaries in a Rust mono-repo setup, giving you a similar experience to what
 you may already know with `docker` CLI.
-
-**NOTE** : It does not aim to reproduce the exact same behaviour as what
-does `docker`, but stick to its API when relevant.
 
 ## Dependencies
 
@@ -24,26 +21,31 @@ pueued -d
 
 ## Installation
 
+### From crates.io
+
+```sh
+cargo install jocker
+```
+
+### From source
+
 ```sh
 # Setup sqlx db
 cd crates/jocker-lib
 sqlx db create --database-url sqlite:.jocker.db
 sqlx migrate run --database-url sqlite:.jocker.db
 
-# From git
-cargo install --git https://gitlab.com/wykiki/jocker.git jocker
-
 # From sources
-git clone https://gitlab.com/wykiki/jocker.git
+git clone https://github.com/Wykiki/jocker.git
 cargo install --offline --path crates/jocker
 ```
 
 ## Wipe state
 
 In case you have weird behaviour, you can delete `jocker`'s states located
-under `~/.local/state/jocker/`. Doing so won't terminate running subprocesses,
-so you may need to terminate them yourself, with some `kill`, like :
-`ps u | grep target | awk '{print $2}' | xargs kill`
+under `~/.local/state/jocker/` with the command `jocker clean`. Doing so
+should also stop and clean related `pueue` tasks. If that's not the case,
+you can reset `pueue` tasks with `pueue reset`.
 
 ## TODO
 
@@ -55,10 +57,9 @@ so you may need to terminate them yourself, with some `kill`, like :
 - [x] Handle `stack.inherits` keyword in config
 - [x] Correctly show logs while building
 - [x] Split project into different crates
-- [ ] Have an UI
 - [x] Correctly show both stdout and stderr of a running process
-- [ ] When showing all logs, group logs per service before streaming them
 - [x] Correctly stop child processes
 - [x] Command to wipe project state
 - [ ] Validate config file with https://docs.rs/jsonschema/latest/jsonschema/ or similar
-
+- [ ] Have an UI
+- [ ] When showing all logs, group logs per service before streaming them
