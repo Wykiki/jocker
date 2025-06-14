@@ -28,6 +28,7 @@ jobs:
       - name: Cache files
         uses: Swatinem/rust-cache@v2
       - run: source .env
+      - run: echo $DATABASE_URL
       - run: cargo install pueue sqlx-cli
       - run: pueued -d
       - run: cargo sqlx db create
