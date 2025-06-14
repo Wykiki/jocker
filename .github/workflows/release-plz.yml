@@ -27,6 +27,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache files
         uses: Swatinem/rust-cache@v2
+      - run: cargo install pueue sqlx-cli
+      - run: pueued -d
+      - run: cargo sqlx db create
+      - run: cargo sqlx migrate run --source ${PWD}/crates/jocker-lib/migrations
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:

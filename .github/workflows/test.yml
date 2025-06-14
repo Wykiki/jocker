@@ -16,5 +16,5 @@ jobs:
       - run: cargo install pueue sqlx-cli
       - run: pueued -d
       - run: cargo sqlx db create
-      - run: cargo sqlx migrate run
+      - run: cargo sqlx migrate run --source ${PWD}/crates/jocker-lib/migrations
       - run: cargo test --all-features
