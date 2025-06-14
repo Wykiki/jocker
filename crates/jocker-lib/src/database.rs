@@ -427,7 +427,7 @@ impl Database {
                 .ok_or_else(|| Error::new(InnerError::Filesystem))?,
         )
         .await?;
-        sqlx::migrate!().run(&pool).await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
         Ok(pool)
     }
 }

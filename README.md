@@ -31,9 +31,8 @@ cargo install jocker
 
 ```sh
 # Setup sqlx db
-cd crates/jocker-lib
-sqlx db create --database-url sqlite:.jocker.db
-sqlx migrate run --database-url sqlite:.jocker.db
+cargo sqlx db create
+cargo sqlx migrate run
 
 # From sources
 git clone https://github.com/Wykiki/jocker.git
