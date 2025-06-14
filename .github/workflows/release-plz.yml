@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache files
         uses: Swatinem/rust-cache@v2
+      - run: source .env
       - run: cargo install pueue sqlx-cli
       - run: pueued -d
       - run: cargo sqlx db create
