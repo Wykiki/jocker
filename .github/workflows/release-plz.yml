@@ -38,8 +38,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          DATABASE_URL: ${GITHUB_WORKSPACE}/.jocker.sqlite3
-          SOURCE: ${GITHUB_WORKSPACE}/crates/jocker-lib/migrations
+          DATABASE_URL: ${{ github.workspace }}/.jocker.sqlite3
+          SOURCE: ${{ github.workspace }}/crates/jocker-lib/migrations
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
