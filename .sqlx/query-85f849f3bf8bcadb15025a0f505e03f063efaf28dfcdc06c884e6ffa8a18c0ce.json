@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO metadata (id, default_stack)\n                VALUES ($1, $2)\n                ON CONFLICT(id)\n                DO UPDATE SET\n                    default_stack = excluded.default_stack\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "85f849f3bf8bcadb15025a0f505e03f063efaf28dfcdc06c884e6ffa8a18c0ce"
+}

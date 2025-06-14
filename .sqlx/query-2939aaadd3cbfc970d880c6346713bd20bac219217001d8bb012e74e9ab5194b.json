@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                SELECT name, binary, state, pid, args, cargo_args, env\n                FROM process\n                ORDER BY name ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "binary",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "state",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "pid",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "args",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "cargo_args",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "env",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2939aaadd3cbfc970d880c6346713bd20bac219217001d8bb012e74e9ab5194b"
+}

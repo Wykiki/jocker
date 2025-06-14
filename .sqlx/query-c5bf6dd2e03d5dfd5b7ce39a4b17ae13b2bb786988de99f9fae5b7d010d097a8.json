@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                        INSERT INTO rel_stack_inherited_process (stack_name, process_name)\n                        VALUES ($1, $2)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c5bf6dd2e03d5dfd5b7ce39a4b17ae13b2bb786988de99f9fae5b7d010d097a8"
+}

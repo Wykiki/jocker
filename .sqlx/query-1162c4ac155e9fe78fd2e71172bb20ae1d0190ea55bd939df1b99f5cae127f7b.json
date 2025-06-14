@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE process\n                SET pid = ?2\n                WHERE name = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1162c4ac155e9fe78fd2e71172bb20ae1d0190ea55bd939df1b99f5cae127f7b"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                SELECT config_updated_at\n                FROM metadata\n                LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "config_updated_at",
+        "ordinal": 0,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "974f470fd811cd6f70fb192f980a7c7a6e4c057020f71232308ac6b77079ae4d"
+}

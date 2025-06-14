@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO stack (name)\n                    VALUES ($1)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "34c0db052668e04c18bdca355ab5f9078dacca0924a9d0dfca32ee5a295708a0"
+}

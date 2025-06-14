@@ -27,14 +27,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache files
         uses: Swatinem/rust-cache@v2
-      - name: Install required dependencies
-        run: cargo install pueue sqlx-cli
-      - name: Start pueue daemon
-        run: pueued -d
-      - name: Create SQLite database
-        run: cargo sqlx db create --database-url sqlite:crates/jocker-lib/.jocker.db
-      - name: Apply database migrations
-        run: cargo sqlx migrate run --database-url sqlite:crates/jocker-lib/.jocker.db --source crates/jocker-lib/migrations
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:

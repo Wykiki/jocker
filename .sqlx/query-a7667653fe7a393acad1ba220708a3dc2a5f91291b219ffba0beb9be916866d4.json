@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO metadata (id, binaries_updated_at)\n                VALUES ($1, $2)\n                ON CONFLICT(id)\n                DO UPDATE SET\n                    binaries_updated_at = excluded.binaries_updated_at\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a7667653fe7a393acad1ba220708a3dc2a5f91291b219ffba0beb9be916866d4"
+}

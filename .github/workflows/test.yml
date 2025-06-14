@@ -13,8 +13,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo install pueue sqlx-cli
+      - run: cargo install pueue
       - run: pueued -d
-      - run: cargo sqlx db create --database-url sqlite:crates/jocker-lib/.jocker.db
-      - run: cargo sqlx migrate run --database-url sqlite:crates/jocker-lib/.jocker.db --source crates/jocker-lib/migrations
       - run: cargo test --all-features
