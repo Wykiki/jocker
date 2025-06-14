@@ -17,9 +17,6 @@ use tabled::Table;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    if cfg!(target_os = "windows") {
-        panic!("platform not supported: windows");
-    }
     let cli: Cli = argh::from_env();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
     match cli.sub_command {
