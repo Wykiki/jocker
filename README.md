@@ -14,7 +14,7 @@ you may already know with `docker` CLI.
 
 ```sh
 # Install Pueue
-cargo install pueue --version 4.0.0
+cargo install pueue@4
 # Start Pueue daemon
 pueued -d
 ```
@@ -30,12 +30,15 @@ cargo install jocker
 ### From source
 
 ```sh
-# Setup sqlx db
-cargo sqlx db create
-cargo sqlx migrate run
-
-# From sources
+# Clone
 git clone https://github.com/Wykiki/jocker.git
+
+# sqlx setup
+cargo install sqlx-cli
+cargo sqlx db create
+cargo sqlx migrate run --source ${PWD}/crates/jocker-lib/migrations
+
+# Install
 cargo install --offline --path crates/jocker
 ```
 
