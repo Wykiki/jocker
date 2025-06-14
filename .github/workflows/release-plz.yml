@@ -27,8 +27,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache files
         uses: Swatinem/rust-cache@v2
-      - run: source .env
-      - run: echo $DATABASE_URL
+      - name: Load .env
+        uses: cardinalby/export-env-action@v2
+        with:
+          envFile: '.env'
+          expand: 'true'
       - run: cargo install pueue sqlx-cli
       - run: pueued -d
       - run: cargo sqlx db create
