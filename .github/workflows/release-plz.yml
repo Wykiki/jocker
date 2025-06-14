@@ -18,9 +18,6 @@ jobs:
     if: ${{ github.repository_owner == 'Wykiki' }}
     permissions:
       contents: write
-    env:
-      DATABASE_URL: ${{ env.GITHUB_WORKSPACE }}/.jocker.sqlite3
-      SOURCE: ${{ env.GITHUB_WORKSPACE }}/crates/jocker-lib/migrations
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,8 +29,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - run: cargo install pueue sqlx-cli
       - run: pueued -d
-      - run: cargo sqlx db create --no-dotenv
-      - run: cargo sqlx migrate run --no-dotenv --source ${SOURCE}
+      - run: cargo sqlx db create
+      - run: cargo sqlx migrate run --source ${PWD}/crates/jocker-lib/migrations
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:
@@ -41,6 +38,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          DATABASE_URL: ${{ env.GITHUB_WORKSPACE }}/.jocker.sqlite3
+          SOURCE: ${{ env.GITHUB_WORKSPACE }}/crates/jocker-lib/migrations
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
