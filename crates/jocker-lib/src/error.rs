@@ -88,8 +88,6 @@ pub enum InnerError {
     FromUtf8Error(#[from] std::string::FromUtf8Error),
     #[error("IO error")]
     Io(#[from] std::io::Error),
-    #[error("Notify error")]
-    Notify(#[from] notify::Error),
     #[error("ParseIntError error")]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("pueue error")]
@@ -98,8 +96,6 @@ pub enum InnerError {
     SerdeJson(#[from] serde_json::Error),
     #[error("Serde YAML error")]
     SerdeYaml(#[from] serde_yml::Error),
-    #[error("Sqlite error")]
-    Sqlite(#[from] rusqlite::Error),
     #[error("sqlx error")]
     Sqlx(#[from] sqlx::Error),
     #[error("sqlx migration error")]
