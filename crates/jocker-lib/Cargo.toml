@@ -15,26 +15,17 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 dotenvy = { workspace = true }
-fork = { workspace = true }
-hex = { workspace = true }
-hmac = { workspace = true }
-notify = { workspace = true }
 once_cell = { workspace = true }
 pueue-lib = { workspace = true }
 regex = { workspace = true }
-rusqlite = { workspace = true }
-semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yml = { workspace = true }
 schemars = { workspace = true }
-sha2 = { workspace = true }
 snap = { workspace = true }
 sqlx = { workspace = true }
-tabled = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
