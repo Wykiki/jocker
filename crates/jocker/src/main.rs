@@ -3,7 +3,8 @@ mod cli;
 use core::panic;
 use std::sync::Arc;
 
-use cli::{Cli, CliSubCommand, PsOutputCli};
+use clap::Parser as _;
+use cli::{Cli, Commands, PsOutputCli};
 use jocker_lib::common::Exec;
 use jocker_lib::logs::Logs;
 use jocker_lib::ps::Ps;
@@ -17,10 +18,10 @@ use tabled::Table;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let cli: Cli = argh::from_env();
+    let cli = Cli::parse();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
-    match cli.sub_command {
-        CliSubCommand::Clean(_) => {
+    match cli.command {
+        Commands::Clean(_) => {
             Arc::try_unwrap(state)
                 .map_err(|_| {
                     Error::new(InnerError::Lock(
@@ -30,8 +31,8 @@ pub async fn main() -> Result<()> {
                 .clean()
                 .await?
         }
-        CliSubCommand::Logs(args) => Logs::new(args.into(), state.clone()).exec().await?,
-        CliSubCommand::Ps(args) => {
+        Commands::Logs(args) => Logs::new(args.into(), state.clone()).exec().await?,
+        Commands::Ps(args) => {
             let ps: Vec<PsOutputCli> = Ps::new(args.into(), state.clone())
                 .run()
                 .await?
@@ -42,8 +43,8 @@ pub async fn main() -> Result<()> {
             table.with(Style::blank());
             println!("{table}");
         }
-        CliSubCommand::Start(args) => Start::new(args.into(), state.clone()).exec().await?,
-        CliSubCommand::Stop(args) => Stop::new(args.into(), state.clone()).exec().await?,
+        Commands::Start(args) => Start::new(args.into(), state.clone()).exec().await?,
+        Commands::Stop(args) => Stop::new(args.into(), state.clone()).exec().await?,
         _ => panic!(),
     };
     Ok(())
