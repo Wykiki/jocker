@@ -1,7 +1,6 @@
-use std::fmt::Display;
+use std::{fmt::Display, path::PathBuf};
 
-use argh::FromArgs;
-
+use clap::{command, Args, Parser, Subcommand};
 use jocker_lib::{
     common::ProcessState,
     logs::LogsArgs,
@@ -11,28 +10,26 @@ use jocker_lib::{
 };
 use tabled::Tabled;
 
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Debug)]
+#[command(version, about, long_about = None)]
 /// Top-level command.
 pub struct Cli {
     /// whether to trigger a hard refresh
-    #[argh(switch)]
     pub refresh: bool,
 
     /// which stack to use
-    #[argh(option)]
     pub stack: Option<String>,
 
     /// in which folder to execute action
-    #[argh(option)]
-    pub target_directory: Option<String>,
+    #[arg(short, long)]
+    pub target_directory: Option<PathBuf>,
 
-    #[argh(subcommand)]
-    pub sub_command: CliSubCommand,
+    #[command(subcommand)]
+    pub command: Commands,
 }
 
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand)]
-pub enum CliSubCommand {
+#[derive(Subcommand, PartialEq, Debug)]
+pub enum Commands {
     Ui(UiArgs),
     Clean(CleanArgsCli),
     Logs(LogsArgsCli),
@@ -41,31 +38,27 @@ pub enum CliSubCommand {
     Stop(StopArgsCli),
 }
 
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Args)]
 /// First subcommand.
-#[argh(subcommand, name = "ui")]
 pub struct UiArgs {}
 
-#[derive(Clone, Debug, FromArgs, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Args)]
 /// Clean jocker state and resources
-#[argh(subcommand, name = "clean")]
 pub struct CleanArgsCli {}
 
-#[derive(Clone, Debug, FromArgs, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Args)]
 /// Start processes
-#[argh(subcommand, name = "logs")]
 pub struct LogsArgsCli {
     /// whether to follow logs or not
-    #[argh(switch, short = 'f')]
+    #[arg(short, long)]
     pub follow: bool,
     /// prepend each line with its process name
-    #[argh(switch, short = 'p')]
+    #[arg(short, long)]
     pub process_prefix: bool,
     /// only show new log entries
-    #[argh(switch, short = 't')]
+    #[arg(short, long)]
     pub tail: bool,
     /// filter process to act upon
-    #[argh(positional)]
     pub processes: Vec<String>,
 }
 
@@ -80,11 +73,9 @@ impl From<LogsArgsCli> for LogsArgs {
     }
 }
 
-#[derive(Debug, FromArgs, PartialEq)]
+#[derive(Debug, PartialEq, Args)]
 /// List processes
-#[argh(subcommand, name = "ps")]
 pub struct PsArgsCli {
-    #[argh(positional)]
     /// filter process to act upon
     pub processes: Vec<String>,
 }
@@ -116,11 +107,9 @@ impl From<PsOutput> for PsOutputCli {
     }
 }
 
-#[derive(Debug, FromArgs, PartialEq)]
+#[derive(Debug, PartialEq, Args)]
 /// Start processes
-#[argh(subcommand, name = "start")]
 pub struct StartArgsCli {
-    #[argh(positional)]
     /// filter process to act upon
     pub processes: Vec<String>,
 }
@@ -133,14 +122,12 @@ impl From<StartArgsCli> for StartArgs {
     }
 }
 
-#[derive(Clone, Debug, FromArgs, PartialEq)]
+#[derive(Debug, PartialEq, Args)]
 /// List processes
-#[argh(subcommand, name = "stop")]
 pub struct StopArgsCli {
     /// send SIGKILL instead of SIGTERM
-    #[argh(switch)]
+    #[arg(short, long)]
     pub kill: bool,
-    #[argh(positional)]
     /// filter process to act upon
     pub processes: Vec<String>,
 }
