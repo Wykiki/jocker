@@ -9,10 +9,6 @@ on:
     branches:
       - main
 
-env:
-  DATABASE_URL: sqlite:${{ github.workspace }}/.jocker.sqlite3
-  SOURCE: ${{ github.workspace }}/crates/jocker-lib/migrations
-
 jobs:
 
   # Release unpublished packages.
@@ -31,11 +27,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache files
         uses: Swatinem/rust-cache@v2
-      - name: Install dependencies
-        run: cargo install sqlx-cli
-      - run: cargo sqlx db create --no-dotenv
-      - name: Migrate database
-        run: cargo sqlx migrate run --no-dotenv --source ${PWD}/crates/jocker-lib/migrations
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:

@@ -14,6 +14,5 @@ pkgs.mkShell {
   packages = with pkgs; [
     lld
     pueue
-    sqlx-cli
   ];
 }

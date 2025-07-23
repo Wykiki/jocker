@@ -92,14 +92,22 @@ pub enum InnerError {
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("pueue error")]
     Pueue(#[from] pueue_lib::Error),
+    #[error("redb commit error")]
+    RedbCommit(#[from] redb::CommitError),
+    #[error("redb database error")]
+    RedbDatabase(#[from] redb::DatabaseError),
+    #[error("redb storage error")]
+    RedbStorage(#[from] redb::StorageError),
+    #[error("redb table error")]
+    RedbTable(#[from] redb::TableError),
+    #[error("redb transaction error")]
+    RedbTransaction(#[from] redb::TransactionError),
+    #[error("redb upgrade error")]
+    RedbUpgrade(#[from] redb::UpgradeError),
     #[error("Serde JSON error")]
     SerdeJson(#[from] serde_json::Error),
     #[error("Serde YAML error")]
     SerdeYaml(#[from] serde_yml::Error),
-    #[error("sqlx error")]
-    Sqlx(#[from] sqlx::Error),
-    #[error("sqlx migration error")]
-    SqlxMigration(#[from] sqlx::migrate::MigrateError),
     #[error("SystemTime error")]
     SystemTime(#[from] std::time::SystemTimeError),
     #[error("TryFromInt error")]
