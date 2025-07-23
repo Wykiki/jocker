@@ -15,7 +15,7 @@ use crate::{
         cargo::{BinaryPackage, Cargo},
         pueue::Pueue,
     },
-    common::{Process, ProcessState, Stack, JOCKER, JOCKER_ENV_STACK, MAX_RECURSION_LEVEL},
+    common::{Binary, Process, ProcessState, Stack, JOCKER, JOCKER_ENV_STACK, MAX_RECURSION_LEVEL},
     config::{ConfigFile, ConfigStack},
     database::Database,
     error::{lock_error, Error, InnerError, Result},
@@ -109,11 +109,11 @@ impl State {
         &self.target_dir
     }
 
-    pub async fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
+    pub async fn get_binaries(&self) -> Result<Vec<Binary>> {
         self.db.get_binaries().await
     }
 
-    pub async fn set_binaries(&self, binaries: &[BinaryPackage]) -> Result<()> {
+    pub async fn set_binaries(&self, binaries: &[Binary]) -> Result<()> {
         self.db.set_binaries(binaries).await
     }
 
@@ -168,7 +168,6 @@ impl State {
     }
 
     pub async fn set_pid(&self, process_name: &str, pid: Option<usize>) -> Result<()> {
-        let pid = pid.map(i32::try_from).transpose()?;
         self.db.set_process_pid(process_name, pid).await
     }
 
@@ -282,7 +281,11 @@ impl State {
         if !hard {
             return Ok(());
         }
-        let binaries: Vec<BinaryPackage> = Self::fetch_bins(self.get_target_dir()).await?;
+        let binaries: Vec<Binary> = Self::fetch_bins(self.get_target_dir())
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
         self.set_binaries(&binaries).await?;
         Ok(())
     }

@@ -5,8 +5,10 @@ use std::{
 
 use pueue_lib::TaskStatus;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::{
+    command::cargo::BinaryPackage,
     config::ConfigProcess,
     error::{Error, InnerError, Result},
     Pid,
@@ -21,7 +23,28 @@ pub trait Exec<T> {
     async fn exec(&self) -> Result<T>;
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+pub struct Binary {
+    pub name: String,
+    pub id: Url,
+}
+
+impl Binary {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl From<BinaryPackage> for Binary {
+    fn from(value: BinaryPackage) -> Self {
+        Self {
+            name: value.name,
+            id: value.id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Process {
     pub name: String,
     pub binary: String,
@@ -157,7 +180,7 @@ impl TryFrom<String> for ProcessState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Stack {
     pub name: String,
     pub processes: HashSet<String>,

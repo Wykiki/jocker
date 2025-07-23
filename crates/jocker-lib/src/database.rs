@@ -1,291 +1,315 @@
-use std::{collections::HashSet, path::Path, str::FromStr as _};
+use std::{collections::HashSet, path::Path, sync::Arc};
 
-use chrono::{DateTime, TimeZone, Utc};
-use sqlx::{Pool, Sqlite, SqlitePool};
-use tokio::fs::File;
-use url::Url;
+use chrono::{DateTime, Utc};
+use redb::{ReadableTable, TableDefinition, TypeName, Value};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    command::cargo::BinaryPackage,
-    common::{Process, ProcessState, Stack},
+    common::{Binary, Process, ProcessState, Stack},
     error::{Error, InnerError, Result},
 };
 
-const DB_FILE: &str = "db.sqlite3";
+const DB_FILE: &str = "db.redb";
+const METADATA: TableDefinition<u8, Metadata> = TableDefinition::new("metadata");
+const BINARY: TableDefinition<&str, Binary> = TableDefinition::new("binary");
+const PROCESS: TableDefinition<&str, Process> = TableDefinition::new("process");
+const STACK: TableDefinition<&str, Stack> = TableDefinition::new("stack");
 
-pub struct BinaryPackageSql {
-    pub name: String,
-    pub id: String,
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct Metadata {
+    binaries_updated_at: DateTime<Utc>,
+    config_updated_at: DateTime<Utc>,
+    default_stack: Option<String>,
 }
 
-impl TryFrom<BinaryPackageSql> for BinaryPackage {
-    type Error = Error;
+impl Value for Metadata {
+    type SelfType<'a>
+        = Metadata
+    where
+        Self: 'a;
 
-    fn try_from(value: BinaryPackageSql) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            name: value.name,
-            id: Url::from_str(&value.id)?,
-        })
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        serde_json::from_slice(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        serde_json::to_vec(value).unwrap()
+    }
+
+    fn type_name() -> redb::TypeName {
+        TypeName::new("jocker-lib_metadata")
     }
 }
 
-pub struct ProcessSql {
-    pub name: String,
-    pub binary: String,
-    pub state: String,
-    pub pid: Option<i64>,
-    pub args: String,
-    pub cargo_args: String,
-    pub env: String,
+impl Value for Binary {
+    type SelfType<'a>
+        = Binary
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        serde_json::from_slice(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        serde_json::to_vec(value).unwrap()
+    }
+
+    fn type_name() -> TypeName {
+        TypeName::new("jocker-lib_binary-package")
+    }
 }
 
-impl TryFrom<ProcessSql> for Process {
-    type Error = Error;
+impl Value for Process {
+    type SelfType<'a>
+        = Process
+    where
+        Self: 'a;
 
-    fn try_from(value: ProcessSql) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            name: value.name,
-            binary: value.binary,
-            state: value.state.try_into()?,
-            pid: value.pid.map(TryFrom::try_from).transpose()?,
-            args: serde_json::from_str(&value.args)?,
-            cargo_args: serde_json::from_str(&value.cargo_args)?,
-            env: serde_json::from_str(&value.env)?,
-        })
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        serde_json::from_slice(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        serde_json::to_vec(value).unwrap()
+    }
+
+    fn type_name() -> TypeName {
+        TypeName::new("jocker-lib_process")
+    }
+}
+
+impl Value for Stack {
+    type SelfType<'a>
+        = Stack
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        serde_json::from_slice(data).unwrap()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        serde_json::to_vec(value).unwrap()
+    }
+
+    fn type_name() -> TypeName {
+        TypeName::new("jocker-lib_stack")
     }
 }
 
 pub(crate) struct Database {
-    pool: Pool<Sqlite>,
+    db: Arc<redb::Database>,
 }
 
 impl Database {
     pub(crate) async fn new(database_directory_path: impl AsRef<Path>) -> Result<Self> {
-        let pool = Self::init_pool(&database_directory_path).await?;
-        Ok(Self { pool })
+        let database_path = database_directory_path.as_ref().join(DB_FILE);
+        let mut db = redb::Database::create(database_path)?;
+        db.upgrade()?;
+        let txn = db.begin_write()?;
+        {
+            txn.open_table(METADATA)?;
+            txn.open_table(BINARY)?;
+            txn.open_table(PROCESS)?;
+            txn.open_table(STACK)?;
+        }
+        txn.commit()?;
+        Ok(Self { db: Arc::new(db) })
     }
 
-    pub(crate) async fn get_binaries(&self) -> Result<Vec<BinaryPackage>> {
-        let mut conn = self.pool.acquire().await?;
-        let binaries = sqlx::query_as!(
-            BinaryPackageSql,
-            r#"
-                SELECT name, id
-                FROM binary
-                ORDER BY name
-            "#,
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(TryInto::try_into)
-        .collect::<Result<_>>()?;
-        Ok(binaries)
+    pub(crate) async fn get_binaries(&self) -> Result<Vec<Binary>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(BINARY)?;
+
+        Ok(table
+            .iter()?
+            .map(|v| v.map(|vv| vv.1.value()))
+            .collect::<std::result::Result<_, _>>()?)
     }
 
     pub(crate) async fn get_binaries_updated_at(&self) -> Result<Option<DateTime<Utc>>> {
-        let mut conn = self.pool.acquire().await?;
-        let binaries_updated_at = sqlx::query_scalar!(
-            r#"
-                SELECT binaries_updated_at
-                FROM metadata
-                LIMIT 1
-            "#,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        .flatten()
-        .map(|v| Utc.from_utc_datetime(&v));
-        Ok(binaries_updated_at)
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(METADATA)?;
+
+        Ok(table.get(0)?.map(|v| v.value().binaries_updated_at))
     }
 
     pub(crate) async fn get_config_updated_at(&self) -> Result<Option<DateTime<Utc>>> {
-        let mut conn = self.pool.acquire().await?;
-        let config_updated_at = sqlx::query_scalar!(
-            r#"
-                SELECT config_updated_at
-                FROM metadata
-                LIMIT 1
-            "#,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        .flatten()
-        .map(|v| Utc.from_utc_datetime(&v));
-        Ok(config_updated_at)
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(METADATA)?;
+
+        Ok(table.get(0)?.map(|v| v.value().config_updated_at))
     }
 
     pub(crate) async fn get_default_stack(&self) -> Result<Option<String>> {
-        let mut conn = self.pool.acquire().await?;
-        let default_stack = sqlx::query_scalar!(
-            r#"
-                SELECT default_stack
-                FROM metadata
-                LIMIT 1
-            "#,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        .flatten();
-        Ok(default_stack)
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(METADATA)?;
+
+        Ok(table.get(0)?.and_then(|v| v.value().default_stack))
     }
 
     pub(crate) async fn get_processes(&self) -> Result<Vec<Process>> {
-        let mut conn = self.pool.acquire().await?;
-        let processes = sqlx::query_as!(
-            ProcessSql,
-            r#"
-                SELECT name, binary, state, pid, args, cargo_args, env
-                FROM process
-                ORDER BY name ASC
-            "#,
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(TryInto::try_into)
-        .collect::<Result<Vec<_>>>()?;
-        Ok(processes)
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(PROCESS)?;
+
+        Ok(table
+            .iter()?
+            .map(|v| v.map(|vv| vv.1.value()))
+            .collect::<std::result::Result<_, _>>()?)
     }
 
     pub(crate) async fn get_stack(&self, stack: &str) -> Result<Stack> {
-        let mut conn = self.pool.begin().await?;
-        let name = sqlx::query_scalar!(
-            r#"
-                SELECT name
-                FROM stack
-                WHERE name = $1
-            "#,
-            stack,
-        )
-        .fetch_optional(&mut *conn)
-        .await?
-        .ok_or_else(|| Error::new(InnerError::StackNotFound(stack.to_owned())))?;
-        let processes: HashSet<String> = sqlx::query_scalar!(
-            r#"
-                SELECT process_name
-                FROM rel_stack_process
-                WHERE stack_name = $1
-            "#,
-            stack,
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .collect();
-        let inherited_processes: HashSet<String> = sqlx::query_scalar!(
-            r#"
-                SELECT process_name
-                FROM rel_stack_inherited_process
-                WHERE stack_name = $1
-            "#,
-            stack,
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .collect();
-        conn.commit().await?;
-        Ok(Stack {
-            name,
-            processes,
-            inherited_processes,
-        })
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(STACK)?;
+
+        table
+            .get(stack)?
+            .map(|v| v.value())
+            .ok_or_else(|| Error::new(InnerError::StackNotFound(stack.to_owned())))
     }
 
-    pub(crate) async fn set_binaries(&self, binaries: &[BinaryPackage]) -> Result<()> {
-        let mut conn = self.pool.begin().await?;
-        sqlx::query!(
-            r#"
-                DELETE FROM binary
-            "#,
-        )
-        .execute(&mut *conn)
-        .await?;
-        for bin in binaries {
-            let id = bin.id.to_string();
-            sqlx::query!(
-                r#"
-                    INSERT INTO binary (name, id)
-                    VALUES ($1, $2)
-                "#,
-                bin.name,
-                id,
-            )
-            .execute(&mut *conn)
-            .await?;
+    pub(crate) async fn set_binaries(&self, binaries: &[Binary]) -> Result<()> {
+        let txn = self.db.begin_write()?;
+        {
+            txn.delete_table(BINARY)?;
+            let mut table = txn.open_table(BINARY)?;
+            for bin in binaries {
+                table.insert(bin.name.as_str(), bin)?;
+            }
         }
-        conn.commit().await?;
+        txn.commit()?;
         Ok(())
     }
 
     pub(crate) async fn set_binaries_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        let mut conn = self.pool.acquire().await?;
-        sqlx::query!(
-            r#"
-                INSERT INTO metadata (id, binaries_updated_at)
-                VALUES ($1, $2)
-                ON CONFLICT(id)
-                DO UPDATE SET
-                    binaries_updated_at = excluded.binaries_updated_at
-            "#,
-            0,
-            date,
-        )
-        .execute(&mut *conn)
-        .await?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut metadata = txn
+                .open_table(METADATA)?
+                .get(0)?
+                .map(|v| v.value())
+                .unwrap_or_default();
+            metadata.binaries_updated_at = date;
+            let mut table = txn.open_table(METADATA)?;
+            table.insert(0, metadata)?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
     pub(crate) async fn set_config_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
-        let mut conn = self.pool.acquire().await?;
-        sqlx::query!(
-            r#"
-                INSERT INTO metadata (id, config_updated_at)
-                VALUES ($1, $2)
-                ON CONFLICT(id)
-                DO UPDATE SET
-                    config_updated_at = excluded.config_updated_at
-            "#,
-            0,
-            date,
-        )
-        .execute(&mut *conn)
-        .await?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut metadata = txn
+                .open_table(METADATA)?
+                .get(0)?
+                .map(|v| v.value())
+                .unwrap_or_default();
+            metadata.config_updated_at = date;
+            let mut table = txn.open_table(METADATA)?;
+            table.insert(0, metadata)?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
     pub(crate) async fn set_default_stack(&self, stack: &Option<String>) -> Result<()> {
-        let mut conn = self.pool.acquire().await?;
-        sqlx::query!(
-            r#"
-                INSERT INTO metadata (id, default_stack)
-                VALUES ($1, $2)
-                ON CONFLICT(id)
-                DO UPDATE SET
-                    default_stack = excluded.default_stack
-            "#,
-            0,
-            stack,
-        )
-        .execute(&mut *conn)
-        .await?;
+        if let Some(stack) = stack {
+            self.get_stack(stack).await?;
+        }
+        let txn = self.db.begin_write()?;
+        {
+            let mut metadata = txn
+                .open_table(METADATA)?
+                .get(0)?
+                .map(|v| v.value())
+                .unwrap_or_default();
+            metadata.default_stack = stack.clone();
+            let mut table = txn.open_table(METADATA)?;
+            table.insert(0, metadata)?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
-    pub(crate) async fn set_process_pid(&self, process_name: &str, pid: Option<i32>) -> Result<()> {
-        let mut conn = self.pool.acquire().await?;
-        sqlx::query!(
-            r#"
-                UPDATE process
-                SET pid = ?2
-                WHERE name = ?1
-            "#,
-            process_name,
-            pid,
-        )
-        .execute(&mut *conn)
-        .await?;
+    pub(crate) async fn set_process_pid(
+        &self,
+        process_name: &str,
+        pid: Option<usize>,
+    ) -> Result<()> {
+        let txn = self.db.begin_write()?;
+        {
+            let mut process = txn
+                .open_table(PROCESS)?
+                .get(process_name)?
+                .map(|v| v.value())
+                .unwrap_or_default();
+            process.pid = pid;
+            let mut table = txn.open_table(PROCESS)?;
+            table.insert(process_name, process)?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
@@ -294,55 +318,31 @@ impl Database {
         process_name: &str,
         state: ProcessState,
     ) -> Result<()> {
-        let mut conn = self.pool.acquire().await?;
-        let state = state.to_string();
-        sqlx::query!(
-            r#"
-                UPDATE process
-                SET state = ?2
-                WHERE name = ?1
-            "#,
-            process_name,
-            state,
-        )
-        .execute(&mut *conn)
-        .await?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut process = txn
+                .open_table(PROCESS)?
+                .get(process_name)?
+                .map(|v| v.value())
+                .unwrap_or_default();
+            process.state = state;
+            let mut table = txn.open_table(PROCESS)?;
+            table.insert(process_name, process)?;
+        }
+        txn.commit()?;
         Ok(())
     }
 
     pub(crate) async fn set_processes(&self, processes: &[Process]) -> Result<()> {
-        let mut conn = self.pool.begin().await?;
-
-        sqlx::query!(
-            r#"
-                DELETE FROM process
-            "#,
-        )
-        .execute(&mut *conn)
-        .await?;
-        for proc in processes {
-            let state = proc.state.to_string();
-            let pid: Option<i64> = proc.pid.map(TryInto::try_into).transpose()?;
-            let args = serde_json::to_value(&proc.args)?;
-            let cargo_args = serde_json::to_value(&proc.cargo_args)?;
-            let env = serde_json::to_value(&proc.env)?;
-            sqlx::query!(
-                r#"
-                    INSERT INTO process (name, binary, state, pid, args, cargo_args, env)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                "#,
-                proc.name,
-                proc.binary,
-                state,
-                pid,
-                args,
-                cargo_args,
-                env,
-            )
-            .execute(&mut *conn)
-            .await?;
+        let txn = self.db.begin_write()?;
+        {
+            txn.delete_table(PROCESS)?;
+            let mut table = txn.open_table(PROCESS)?;
+            for process in processes {
+                table.insert(process.name.as_str(), process)?;
+            }
         }
-        conn.commit().await?;
+        txn.commit()?;
         Ok(())
     }
 
@@ -355,80 +355,27 @@ impl Database {
             .collect();
 
         // Lock after getting processes to avoid deadlock
-        let mut conn = self.pool.begin().await?;
-
-        sqlx::query!(
-            r#"
-                DELETE FROM stack
-            "#,
-        )
-        .execute(&mut *conn)
-        .await?;
-        for stack in stacks {
-            let stack_processes = stack.processes.iter();
-            let inherited_processes = stack.inherited_processes.iter();
-            let missing_processes: Vec<String> = stack_processes
-                .clone()
-                .chain(inherited_processes.clone())
-                .filter(|&stack_process| !processes.contains(stack_process))
-                .cloned()
-                .collect();
-            if !missing_processes.is_empty() {
-                return Err(Error::new(InnerError::ProcessNotFound(missing_processes)));
-            }
-            sqlx::query!(
-                r#"
-                    INSERT INTO stack (name)
-                    VALUES ($1)
-                "#,
-                stack.name,
-            )
-            .execute(&mut *conn)
-            .await?;
-            for process in stack_processes {
-                sqlx::query!(
-                    r#"
-                        INSERT INTO rel_stack_process (stack_name, process_name)
-                        VALUES ($1, $2)
-                    "#,
-                    stack.name,
-                    process,
-                )
-                .execute(&mut *conn)
-                .await?;
-            }
-            for process in inherited_processes {
-                sqlx::query!(
-                    r#"
-                        INSERT INTO rel_stack_inherited_process (stack_name, process_name)
-                        VALUES ($1, $2)
-                    "#,
-                    stack.name,
-                    process,
-                )
-                .execute(&mut *conn)
-                .await?;
+        let txn = self.db.begin_write()?;
+        {
+            txn.delete_table(STACK)?;
+            let mut table = txn.open_table(STACK)?;
+            for stack in stacks {
+                let stack_processes = stack.processes.iter();
+                let inherited_processes = stack.inherited_processes.iter();
+                let missing_processes: Vec<String> = stack_processes
+                    .clone()
+                    .chain(inherited_processes.clone())
+                    .filter(|&stack_process| !processes.contains(stack_process))
+                    .cloned()
+                    .collect();
+                if !missing_processes.is_empty() {
+                    return Err(Error::new(InnerError::ProcessNotFound(missing_processes)));
+                }
+                table.insert(stack.name.as_str(), stack)?;
             }
         }
-
-        conn.commit().await?;
+        txn.commit()?;
         Ok(())
-    }
-
-    async fn init_pool(database_directory_path: impl AsRef<Path>) -> Result<Pool<Sqlite>> {
-        let database_path = database_directory_path.as_ref().join(DB_FILE);
-        if !database_path.exists() {
-            File::create(&database_path).await?;
-        }
-
-        let pool = SqlitePool::connect(
-            database_path
-                .to_str()
-                .ok_or_else(|| Error::new(InnerError::Filesystem))?,
-        )
-        .await?;
-        sqlx::migrate!().run(&pool).await?;
-        Ok(pool)
     }
 }
 
@@ -446,15 +393,15 @@ mod tests {
         let (dir, db) = setup().await.unwrap();
         let base_url = format!("file://{}", dir.path().to_str().unwrap());
         let source_bins = [
-            BinaryPackage {
+            Binary {
                 name: "foo".to_owned(),
                 id: Url::parse(&format!("{base_url}/foo")).unwrap(),
             },
-            BinaryPackage {
+            Binary {
                 name: "bar".to_owned(),
                 id: Url::parse(&format!("{base_url}/bar")).unwrap(),
             },
-            BinaryPackage {
+            Binary {
                 name: "baz".to_owned(),
                 id: Url::parse(&format!("{base_url}/baz")).unwrap(),
             },

@@ -15,10 +15,8 @@ pub async fn setup() -> (Arc<State>, TempDir) {
         .unwrap();
     let dir = tempdir().unwrap();
     copy_dir_all(&project_path, &dir).unwrap();
-    (
-        Arc::new(State::new(true, None, Some(dir.path())).await.unwrap()),
-        dir,
-    )
+    let state = State::new(true, None, Some(dir.path())).await.unwrap();
+    (Arc::new(state), dir)
 }
 
 pub async fn setup_cargo(path: impl AsRef<Path>) -> tokio::io::Result<Child> {
