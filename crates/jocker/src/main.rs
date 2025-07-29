@@ -1,7 +1,7 @@
 mod cli;
 mod shell;
+mod ui;
 
-use core::panic;
 use std::sync::Arc;
 
 use clap::{CommandFactory as _, Parser as _};
@@ -17,6 +17,7 @@ use jocker_lib::stop::Stop;
 use jocker_lib::error::{Error, InnerError, Result};
 use tabled::settings::Style;
 use tabled::Table;
+use ui::Ui;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
@@ -61,7 +62,13 @@ pub async fn main() -> Result<()> {
                 .exec()
                 .await?;
         }
-        _ => panic!(),
+        Commands::Ui(args) => {
+            color_eyre::install().expect("Unable to install color_eyre");
+            let terminal = ratatui::init();
+            let app_result = Ui::new(args.into(), state.clone()).run(terminal).await;
+            ratatui::restore();
+            return app_result;
+        }
     };
     Ok(())
 }

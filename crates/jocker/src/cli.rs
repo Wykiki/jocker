@@ -11,6 +11,7 @@ use jocker_lib::{
 use tabled::Tabled;
 
 use crate::shell::Shell;
+use crate::ui::UiArgs;
 
 #[derive(Parser, PartialEq, Debug)]
 #[command(version, about, long_about = None)]
@@ -38,7 +39,6 @@ pub struct Cli {
 
 #[derive(Subcommand, PartialEq, Debug)]
 pub enum Commands {
-    Ui(UiArgs),
     Clean(CleanArgsCli),
     Completion(CompletionArgsCli),
     Logs(LogsArgsCli),
@@ -46,11 +46,8 @@ pub enum Commands {
     Start(StartArgsCli),
     Stop(StopArgsCli),
     Restart(RestartArgsCli),
+    Ui(UiArgsCli),
 }
-
-#[derive(Debug, PartialEq, Args)]
-/// First subcommand.
-pub struct UiArgs {}
 
 #[derive(Debug, Clone, PartialEq, Args)]
 /// Clean jocker state and resources
@@ -187,6 +184,16 @@ impl From<RestartArgsCli> for StopArgs {
             kill: value.kill,
             processes: value.processes,
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Args)]
+/// Launch TUI
+pub struct UiArgsCli {}
+
+impl From<UiArgsCli> for UiArgs {
+    fn from(value: UiArgsCli) -> Self {
+        Self {}
     }
 }
 
