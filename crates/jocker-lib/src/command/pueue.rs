@@ -33,6 +33,7 @@ impl Pueue {
             Ok(client) => client,
             Err(_) => {
                 Pueued::daemonize().await?;
+                Self::wait_for_daemon(Duration::from_secs(10), 0).await?;
                 Self::client().await?
             }
         };
@@ -330,6 +331,25 @@ impl Pueue {
             return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
                 format!("{:?}", response),
             ))));
+        }
+        Ok(())
+    }
+
+    async fn wait_for_daemon(timeout: Duration, count: u32) -> Result<()> {
+        let duration = Duration::from_millis(100) * (2 ^ count);
+        if duration > timeout {
+            Self::client().await?;
+        }
+        let rsp = Self::client().await;
+        if rsp.is_err() {
+            if duration.as_secs() > 1 {
+                println!(
+                    "pueue daemon unreachable, waiting for {} seconds",
+                    duration.as_secs(),
+                );
+            }
+            sleep(duration).await;
+            Box::pin(Self::wait_for_daemon(timeout, count + 1)).await?;
         }
         Ok(())
     }
