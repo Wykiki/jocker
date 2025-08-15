@@ -201,6 +201,10 @@ impl State {
         self.db.get_stack(stack).await
     }
 
+    pub async fn get_stacks(&self) -> Result<Vec<Stack>> {
+        self.db.get_stacks().await
+    }
+
     pub async fn set_stacks(&self, stacks: &[Stack]) -> Result<()> {
         self.db.set_stacks(stacks).await
     }

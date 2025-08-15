@@ -21,6 +21,7 @@ use ui::Ui;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    color_eyre::install().expect("Unable to install color_eyre");
     let cli = Cli::parse();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
     env_logger::Builder::new()
@@ -62,10 +63,9 @@ pub async fn main() -> Result<()> {
                 .exec()
                 .await?;
         }
-        Commands::Ui(args) => {
-            color_eyre::install().expect("Unable to install color_eyre");
+        Commands::Ui => {
             let terminal = ratatui::init();
-            let app_result = Ui::new(args.into(), state.clone()).run(terminal).await;
+            let app_result = Ui::new(state.clone()).run(terminal).await;
             ratatui::restore();
             return app_result;
         }

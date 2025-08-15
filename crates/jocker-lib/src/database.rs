@@ -229,6 +229,16 @@ impl Database {
             .ok_or_else(|| Error::new(InnerError::StackNotFound(stack.to_owned())))
     }
 
+    pub(crate) async fn get_stacks(&self) -> Result<Vec<Stack>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(STACK)?;
+
+        Ok(table
+            .iter()?
+            .map(|v| v.map(|vv| vv.1.value()))
+            .collect::<std::result::Result<_, _>>()?)
+    }
+
     pub(crate) async fn set_binaries(&self, binaries: &[Binary]) -> Result<()> {
         let txn = self.db.begin_write()?;
         {
