@@ -14,6 +14,10 @@ use tabled::Tabled;
 #[command(version, about, long_about = None)]
 /// Top-level command.
 pub struct Cli {
+    /// verbosity level
+    #[command(flatten)]
+    pub verbosity: clap_verbosity_flag::Verbosity,
+
     /// whether to trigger a hard refresh
     pub refresh: bool,
 
