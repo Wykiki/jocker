@@ -19,9 +19,11 @@ pub struct Cli {
     pub verbosity: clap_verbosity_flag::Verbosity,
 
     /// whether to trigger a hard refresh
+    #[arg(short, long)]
     pub refresh: bool,
 
     /// which stack to use
+    #[arg(short, long, env = "JOCKER_STACK")]
     pub stack: Option<String>,
 
     /// in which folder to execute action
@@ -63,6 +65,7 @@ pub struct LogsArgsCli {
     #[arg(short, long)]
     pub tail: bool,
     /// filter process to act upon
+    #[arg(env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -81,6 +84,7 @@ impl From<LogsArgsCli> for LogsArgs {
 /// List processes
 pub struct PsArgsCli {
     /// filter process to act upon
+    #[arg(env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -115,6 +119,7 @@ impl From<PsOutput> for PsOutputCli {
 /// Start processes
 pub struct StartArgsCli {
     /// filter process to act upon
+    #[arg(env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -133,6 +138,7 @@ pub struct StopArgsCli {
     #[arg(short, long)]
     pub kill: bool,
     /// filter process to act upon
+    #[arg(env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
