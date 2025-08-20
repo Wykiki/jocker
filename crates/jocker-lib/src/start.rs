@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use dotenvy::dotenv_iter;
+use log::debug;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 
@@ -73,6 +74,7 @@ impl Start {
         let mut env: HashMap<String, String> = HashMap::new();
         if let Ok(dotenv) = dotenv_iter() {
             for (key, val) in dotenv.flatten() {
+                debug!("process {}, .env variable {} = {}", process_name, key, val);
                 env.insert(key, val);
             }
         }

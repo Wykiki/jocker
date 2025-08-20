@@ -16,6 +16,8 @@ workspace = true
 jocker-lib = { workspace = true }
 
 clap = { workspace = true }
+clap-verbosity-flag = { workspace = true }
+env_logger = { workspace = true }
 tabled = { workspace = true }
 tokio = { workspace = true }
 

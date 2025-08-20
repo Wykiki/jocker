@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 dotenvy = { workspace = true }
+log = { workspace = true }
 once_cell = { workspace = true }
 pueue-lib = { workspace = true }
 redb = { workspace = true }
