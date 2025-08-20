@@ -64,7 +64,24 @@ impl Start {
         Ok(())
     }
 
-    pub async fn run(&self, process: Process) -> Result<()> {
+    pub async fn run(&self) -> Result<()> {
+        let processes = self.state.filter_processes(&self.args.processes).await?;
+        for process in &processes {
+            self.state
+                .set_state(process.name(), ProcessState::Building)
+                .await?;
+        }
+        self.build(processes.as_slice()).await?;
+        for process in processes {
+            let process_name = process.name().to_string();
+            if let Err(e) = self.run_process(process).await {
+                println!("Error while starting process {process_name}: {e}")
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_process(&self, process: Process) -> Result<()> {
         if process.state != ProcessState::Stopped && process.state != ProcessState::Building {
             println!("Process is already started: {}", process.name());
             return Ok(());
@@ -110,19 +127,7 @@ impl Start {
 
 impl Exec<()> for Start {
     async fn exec(&self) -> Result<()> {
-        let processes = self.state.filter_processes(&self.args.processes).await?;
-        for process in &processes {
-            self.state
-                .set_state(process.name(), ProcessState::Building)
-                .await?;
-        }
-        self.build(processes.as_slice()).await?;
-        for process in processes {
-            let process_name = process.name().to_string();
-            if let Err(e) = self.run(process).await {
-                println!("Error while starting process {process_name}: {e}")
-            }
-        }
+        self.run().await?;
 
         Ok(())
     }
