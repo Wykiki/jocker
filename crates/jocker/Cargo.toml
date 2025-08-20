@@ -22,10 +22,10 @@ clap-verbosity-flag = { workspace = true }
 color-eyre = { workspace = true }
 crossterm =  { workspace = true }
 env_logger = { workspace = true }
+futures = { workspace = true }
 ratatui = { workspace = true }
 tabled = { workspace = true }
 tokio = { workspace = true }
-futures = "0.3.31"
 
 [dev-dependencies]
 pueue-lib = { workspace = true }
