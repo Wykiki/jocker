@@ -19,9 +19,6 @@ use tabled::Table;
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let cli = Cli::parse();
-    env_logger::Builder::new()
-        .filter_level(cli.verbosity.into())
-        .init();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
     env_logger::Builder::new()
         .filter_level(cli.verbosity.into())
