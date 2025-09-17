@@ -65,7 +65,7 @@ pub struct LogsArgsCli {
     #[arg(short, long)]
     pub tail: bool,
     /// filter process to act upon
-    #[arg(env = "JOCKER_PROCESSES")]
+    #[arg(value_delimiter = ',', env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -84,7 +84,7 @@ impl From<LogsArgsCli> for LogsArgs {
 /// List processes
 pub struct PsArgsCli {
     /// filter process to act upon
-    #[arg(env = "JOCKER_PROCESSES")]
+    #[arg(value_delimiter = ',', env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -119,7 +119,7 @@ impl From<PsOutput> for PsOutputCli {
 /// Start processes
 pub struct StartArgsCli {
     /// filter process to act upon
-    #[arg(env = "JOCKER_PROCESSES")]
+    #[arg(value_delimiter = ',', env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
@@ -138,7 +138,7 @@ pub struct StopArgsCli {
     #[arg(short, long)]
     pub kill: bool,
     /// filter process to act upon
-    #[arg(env = "JOCKER_PROCESSES")]
+    #[arg(value_delimiter = ',', env = "JOCKER_PROCESSES")]
     pub processes: Vec<String>,
 }
 
