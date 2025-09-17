@@ -12,7 +12,7 @@ pkgs.mkShell {
     (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
   ];
   packages = with pkgs; [
-    lld
+    mold
     pueue
   ];
 }
