@@ -48,6 +48,12 @@ pub async fn main() -> Result<()> {
         }
         Commands::Start(args) => Start::new(args.into(), state.clone()).exec().await?,
         Commands::Stop(args) => Stop::new(args.into(), state.clone()).exec().await?,
+        Commands::Restart(args) => {
+            Stop::new(args.clone().into(), state.clone()).exec().await?;
+            Start::new(args.clone().into(), state.clone())
+                .exec()
+                .await?;
+        }
         _ => panic!(),
     };
     Ok(())

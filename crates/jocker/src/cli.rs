@@ -42,6 +42,7 @@ pub enum Commands {
     Ps(PsArgsCli),
     Start(StartArgsCli),
     Stop(StopArgsCli),
+    Restart(RestartArgsCli),
 }
 
 #[derive(Debug, PartialEq, Args)]
@@ -53,7 +54,7 @@ pub struct UiArgs {}
 pub struct CleanArgsCli {}
 
 #[derive(Debug, Clone, PartialEq, Args)]
-/// Start processes
+/// Show process logs
 pub struct LogsArgsCli {
     /// whether to follow logs or not
     #[arg(short, long)]
@@ -132,7 +133,7 @@ impl From<StartArgsCli> for StartArgs {
 }
 
 #[derive(Debug, PartialEq, Args)]
-/// List processes
+/// Stop processes
 pub struct StopArgsCli {
     /// send SIGKILL instead of SIGTERM
     #[arg(short, long)]
@@ -144,6 +145,34 @@ pub struct StopArgsCli {
 
 impl From<StopArgsCli> for StopArgs {
     fn from(value: StopArgsCli) -> Self {
+        Self {
+            kill: value.kill,
+            processes: value.processes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Args)]
+/// Restart processes
+pub struct RestartArgsCli {
+    /// send SIGKILL instead of SIGTERM
+    #[arg(short, long)]
+    pub kill: bool,
+    /// filter process to act upon
+    #[arg(value_delimiter = ',', env = "JOCKER_PROCESSES")]
+    pub processes: Vec<String>,
+}
+
+impl From<RestartArgsCli> for StartArgs {
+    fn from(value: RestartArgsCli) -> Self {
+        Self {
+            processes: value.processes,
+        }
+    }
+}
+
+impl From<RestartArgsCli> for StopArgs {
+    fn from(value: RestartArgsCli) -> Self {
         Self {
             kill: value.kill,
             processes: value.processes,
