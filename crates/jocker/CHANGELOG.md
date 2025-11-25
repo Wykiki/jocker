@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/Wykiki/jocker/compare/jocker-v0.5.1...jocker-v0.5.2) - 2025-11-25
+
+### Added
+
+- *(cli)* Add shell completion
+- *(cli)* Add restart command
+
 ## [0.5.1](https://github.com/Wykiki/jocker/compare/jocker-v0.5.0...jocker-v0.5.1) - 2025-09-17
 
 ### Added
