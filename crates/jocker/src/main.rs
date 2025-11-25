@@ -1,9 +1,11 @@
 mod cli;
+mod shell;
 
 use core::panic;
 use std::sync::Arc;
 
-use clap::Parser as _;
+use clap::{CommandFactory as _, Parser as _};
+use clap_complete::generate;
 use cli::{Cli, Commands, PsOutputCli};
 use jocker_lib::common::Exec;
 use jocker_lib::logs::Logs;
@@ -33,6 +35,11 @@ pub async fn main() -> Result<()> {
                 })?
                 .clean()
                 .await?
+        }
+        Commands::Completion(args) => {
+            let mut cmd = Cli::command();
+            let cmd_name = cmd.get_name().to_string();
+            generate(args.shell, &mut cmd, cmd_name, &mut std::io::stdout());
         }
         Commands::Logs(args) => Logs::new(args.into(), state.clone()).exec().await?,
         Commands::Ps(args) => {
