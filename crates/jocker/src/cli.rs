@@ -10,6 +10,8 @@ use jocker_lib::{
 };
 use tabled::Tabled;
 
+use crate::shell::Shell;
+
 #[derive(Parser, PartialEq, Debug)]
 #[command(version, about, long_about = None)]
 /// Top-level command.
@@ -38,6 +40,7 @@ pub struct Cli {
 pub enum Commands {
     Ui(UiArgs),
     Clean(CleanArgsCli),
+    Completion(CompletionArgsCli),
     Logs(LogsArgsCli),
     Ps(PsArgsCli),
     Start(StartArgsCli),
@@ -52,6 +55,13 @@ pub struct UiArgs {}
 #[derive(Debug, Clone, PartialEq, Args)]
 /// Clean jocker state and resources
 pub struct CleanArgsCli {}
+
+#[derive(Debug, Clone, PartialEq, Args)]
+/// Generate shell completion
+pub struct CompletionArgsCli {
+    #[arg()]
+    pub shell: Shell,
+}
 
 #[derive(Debug, Clone, PartialEq, Args)]
 /// Show process logs
