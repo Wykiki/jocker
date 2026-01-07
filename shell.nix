@@ -1,7 +1,7 @@
 let
   rust-overlay = (import (builtins.fetchGit {
     url = "https://github.com/oxalica/rust-overlay.git";
-    rev = "ce79bb52eb023f71a03e88cb36c66f35c6668a95";
+    rev = "99cc5667eece98bb35dcf35f7e511031a8b7a125";
   }));
   pkgs = (import <nixpkgs> {
     overlays = [ rust-overlay ];
