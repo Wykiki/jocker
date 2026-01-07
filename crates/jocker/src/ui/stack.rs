@@ -77,6 +77,14 @@ impl StackWidget {
     fn scroll_up(&self) {
         self.state.write().unwrap().table_state.scroll_up_by(1);
     }
+
+    fn select_stack(&self) {
+        let offset = self.state.read().unwrap().table_state.offset();
+        let stack = self.state.read().unwrap().stacks[offset].name.clone();
+        self.state.write().unwrap().table_state.select(Some(offset));
+        let jocker = self.jocker.clone();
+        tokio::spawn(async move { jocker.set_current_stack(&Some(stack)).await.unwrap() });
+    }
 }
 
 impl JockerWidget for &StackWidget {
@@ -84,6 +92,7 @@ impl JockerWidget for &StackWidget {
         match keycode {
             KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
+            KeyCode::Char(' ') => self.select_stack(),
             _ => (),
         }
     }
