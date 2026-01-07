@@ -97,7 +97,6 @@ impl Ui {
         let vertical = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
         let [title_area, body_area] = vertical.areas(frame.area());
         let title = Line::from("Jocker").centered().bold();
-        self.active_widget.as_ref().run();
         frame.render_widget(title, title_area);
         frame.render_widget(self.active_widget.as_ref(), body_area);
     }
@@ -124,6 +123,7 @@ impl Ui {
         } else {
             self.active_widget = self.widgets.stack.clone();
         }
+        self.active_widget.as_ref().run();
     }
 
     fn widget(&self) -> &WidgetType {

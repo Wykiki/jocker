@@ -1,4 +1,8 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    thread::sleep,
+    time::Duration,
+};
 
 use crossterm::event::KeyCode;
 use jocker_lib::common::Stack;
@@ -6,7 +10,7 @@ use jocker_lib::state::State;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    style::{Style, Stylize as _},
+    style::Style,
     widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
 
@@ -51,7 +55,11 @@ impl StackWidget {
 
     fn run(&self) {
         let this = self.clone();
-        tokio::spawn(this.fetch_stacks());
+        let handle = tokio::spawn(this.fetch_stacks());
+        // TODO: Do not block here, have asynchronous propagation of fetch
+        while !handle.is_finished() {
+            sleep(Duration::from_millis(10));
+        }
     }
 
     async fn fetch_stacks(self) {

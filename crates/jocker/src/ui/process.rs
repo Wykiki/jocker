@@ -10,7 +10,7 @@ use jocker_lib::{
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    style::{Style, Stylize as _},
+    style::Style,
     widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
 

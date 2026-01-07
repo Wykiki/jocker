@@ -1,6 +1,6 @@
 use std::{fmt::Display, path::PathBuf};
 
-use clap::{command, Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use jocker_lib::{
     common::ProcessState,
     logs::LogsArgs,
