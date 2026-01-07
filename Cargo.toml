@@ -9,7 +9,7 @@ edition = "2021"
 license = "MIT"
 readme = "README.md"
 repository = "https://gitlab.com/wykiki/jocker"
-rust-version = "1.86.0"
+rust-version = "1.92.0"
 description = """
 Run your monorepo binaries locally with ease !
 """
@@ -30,7 +30,7 @@ futures = "0.3.31"
 log = "0.4.27"
 once_cell = "1.20.2"
 pueue-lib = { version = "0.29.0", features = ["client"] }
-ratatui = "0.29.0"
+ratatui = "0.30.0"
 redb = "2.6.0"
 regex = "1.11.1"
 serde = { version = "1.0.215", features = ["rc"] }
