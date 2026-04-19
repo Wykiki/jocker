@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fs::{canonicalize, create_dir_all, File},
+    fs::{canonicalize, create_dir_all, File, OpenOptions},
     hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -29,6 +29,7 @@ pub struct StateArgs {
 
 pub struct State {
     project_dir: String,
+    log_file: String,
     target_dir: PathBuf,
     db: Database,
     current_stack: Arc<Mutex<Option<String>>>,
@@ -43,10 +44,12 @@ impl State {
     ) -> Result<Self> {
         let target_dir = target_dir.map(Into::into).unwrap_or(canonicalize(".")?);
         let (project_id, project_dir) = Self::get_or_create_state_dir(&target_dir)?;
+        let log_file = format!("{project_dir}/logs.txt");
         let db = Database::new(&project_dir).await?;
         let scheduler = Pueue::new(&project_id).await?;
         let state = Self {
             project_dir,
+            log_file,
             target_dir,
             db,
             current_stack: Arc::new(Mutex::new(None)),
@@ -103,6 +106,13 @@ impl State {
 
     pub async fn set_config_updated_at(&self, date: DateTime<Utc>) -> Result<()> {
         self.db.set_config_updated_at(date).await
+    }
+
+    pub fn get_log_file(&self) -> Result<File> {
+        Ok(OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.log_file)?)
     }
 
     pub fn get_target_dir(&self) -> &Path {

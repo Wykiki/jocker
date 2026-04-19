@@ -10,7 +10,6 @@ use jocker_lib::{
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    style::Style,
     widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
 
@@ -56,6 +55,7 @@ struct ProcessesState {
     processes: Vec<UiProcess>,
     loading_state: LoadingState,
     table_state: TableState,
+    active: bool,
 }
 
 #[derive(Clone)]
@@ -122,19 +122,26 @@ impl JockerWidget for &ProcessWidget {
         }
     }
 
-    fn run(&self) {
+    fn refresh(&self) {
         ProcessWidget::run(self)
+    }
+
+    fn is_active(&self) -> bool {
+        self.state.read().unwrap().active
+    }
+
+    fn set_active(&self, state: bool) {
+        self.state.write().unwrap().active = state;
     }
 }
 
 impl Widget for &ProcessWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let mut state = self.state.write().unwrap();
-
+        let state = self.state.read().unwrap();
         // a block with a right aligned title with the loading state on the right
         let block = Block::bordered()
-            .title("Processes")
-            .title_bottom("j/k to scroll, q to quit");
+            .title("[1] Processes")
+            .style(self.block_border_style());
 
         // a table with the list of pull requests
         let header = Row::new(vec![
@@ -142,19 +149,23 @@ impl Widget for &ProcessWidget {
             Cell::from("State"),
             Cell::from("PID"),
         ]);
-        let rows = state.processes.iter();
         let widths = [
             Constraint::Fill(1),
             Constraint::Length(8),
             Constraint::Max(10),
         ];
-        let table = Table::new(rows, widths)
+        let table = Table::new(state.processes.iter(), widths)
             .block(block)
             .header(header)
             .highlight_spacing(HighlightSpacing::Always)
-            .highlight_symbol(">>")
-            .row_highlight_style(Style::new().on_blue());
+            .row_highlight_style(self.table_row_highlight_style());
 
-        StatefulWidget::render(table, area, buf, &mut state.table_state);
+        drop(state);
+        StatefulWidget::render(
+            table,
+            area,
+            buf,
+            &mut self.state.write().unwrap().table_state,
+        );
     }
 }

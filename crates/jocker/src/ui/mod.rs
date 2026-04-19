@@ -7,7 +7,7 @@ use process::ProcessWidget;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
-    style::Stylize as _,
+    style::Style,
     text::Line,
     widgets::Widget,
     DefaultTerminal, Frame,
@@ -16,10 +16,29 @@ use stack::StackWidget;
 
 mod process;
 mod stack;
+mod style;
 
 pub(crate) trait JockerWidget: Widget {
     fn dispatch_keycode(&self, keycode: KeyCode);
-    fn run(&self);
+    fn refresh(&self);
+    fn is_active(&self) -> bool;
+    fn set_active(&self, state: bool);
+
+    fn block_border_style(&self) -> Style {
+        if self.is_active() {
+            Style::default().green()
+        } else {
+            Style::default()
+        }
+    }
+
+    fn table_row_highlight_style(&self) -> Style {
+        if self.is_active() {
+            Style::default().on_blue()
+        } else {
+            Style::default()
+        }
+    }
 }
 
 enum WidgetType {
@@ -35,10 +54,24 @@ impl JockerWidget for &WidgetType {
         }
     }
 
-    fn run(&self) {
+    fn refresh(&self) {
         match self {
-            WidgetType::Process(widget) => widget.run(),
-            WidgetType::Stack(widget) => widget.run(),
+            WidgetType::Process(widget) => widget.refresh(),
+            WidgetType::Stack(widget) => widget.refresh(),
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        match self {
+            WidgetType::Process(widget) => widget.is_active(),
+            WidgetType::Stack(widget) => widget.is_active(),
+        }
+    }
+
+    fn set_active(&self, state: bool) {
+        match self {
+            WidgetType::Process(widget) => widget.set_active(state),
+            WidgetType::Stack(widget) => widget.set_active(state),
         }
     }
 }
@@ -60,6 +93,36 @@ struct Widgets {
     stack: Arc<WidgetType>,
 }
 
+pub struct UiLayout {
+    processes: Rect,
+    stacks: Rect,
+    logs: Rect,
+    footer: Rect,
+}
+
+impl UiLayout {
+    pub fn new(frame: &mut Frame) -> Self {
+        let [main, footer] = frame.area().layout(&Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ]));
+        let [left, logs] = main.layout(&Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(2),
+        ]));
+        let [processes, stacks] = left.layout(&Layout::vertical([
+            Constraint::Fill(3),
+            Constraint::Fill(1),
+        ]));
+        Self {
+            processes,
+            stacks,
+            logs,
+            footer,
+        }
+    }
+}
+
 pub struct Ui {
     should_quit: bool,
     widgets: Widgets,
@@ -71,6 +134,7 @@ impl Ui {
         let process = Arc::new(WidgetType::Process(ProcessWidget::new(state.clone())));
         let stack = Arc::new(WidgetType::Stack(StackWidget::new(state.clone())));
         let active_widget = process.clone();
+        process.as_ref().set_active(true);
         let widgets = Widgets { process, stack };
         Self {
             should_quit: false,
@@ -80,7 +144,8 @@ impl Ui {
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        self.active_widget.as_ref().run();
+        self.widgets.process.as_ref().refresh();
+        // self.widgets.stack.as_ref().refresh();
         let mut events = EventStream::new();
 
         while !self.should_quit {
@@ -94,36 +159,42 @@ impl Ui {
     }
 
     fn render(&self, frame: &mut Frame) {
-        let vertical = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
-        let [title_area, body_area] = vertical.areas(frame.area());
-        let title = Line::from("Jocker").centered().bold();
-        frame.render_widget(title, title_area);
-        frame.render_widget(self.active_widget.as_ref(), body_area);
+        // let [top, main] = frame.area().layout(&vertical);
+        // let [left, middle, right] = main.layout(&horizontal);
+        let layout = UiLayout::new(frame);
+
+        // let vertical = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
+        // let [title_area, body_area] = vertical.areas(frame.area());
+        // let title = Line::from("Jocker").centered().bold();
+        let footer = Line::from("q: quit, x: menu, h j k l: navigate")
+            .left_aligned()
+            .style(Style::new().blue());
+        frame.render_widget(self.widgets.process.as_ref(), layout.processes);
+        frame.render_widget(self.widgets.stack.as_ref(), layout.stacks);
+        frame.render_widget(footer, layout.footer);
     }
 
     fn handle_term_event(&mut self, event: &Event) {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
                 match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-                    KeyCode::Char('n') => self.toggle_stacks(),
+                    KeyCode::Char('q') => self.should_quit = true,
+                    KeyCode::Char('1') => self.activate_widget(self.widgets.process.clone()),
+                    KeyCode::Char('2') => self.activate_widget(self.widgets.stack.clone()),
                     keycode => self.dispatch_keycode(keycode),
                 }
             }
         }
     }
 
-    fn dispatch_keycode(&self, keycode: KeyCode) {
-        self.widget().dispatch_keycode(keycode);
+    fn activate_widget(&mut self, new_active: Arc<WidgetType>) {
+        self.active_widget.as_ref().set_active(false);
+        self.active_widget = new_active;
+        self.active_widget.as_ref().set_active(true);
     }
 
-    fn toggle_stacks(&mut self) {
-        if matches!(*self.active_widget, WidgetType::Stack(_)) {
-            self.active_widget = self.widgets.process.clone();
-        } else {
-            self.active_widget = self.widgets.stack.clone();
-        }
-        self.active_widget.as_ref().run();
+    fn dispatch_keycode(&self, keycode: KeyCode) {
+        self.widget().dispatch_keycode(keycode);
     }
 
     fn widget(&self) -> &WidgetType {

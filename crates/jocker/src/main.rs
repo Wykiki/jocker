@@ -2,11 +2,13 @@ mod cli;
 mod shell;
 mod ui;
 
+use std::fs::File;
 use std::sync::Arc;
 
 use clap::{CommandFactory as _, Parser as _};
 use clap_complete::generate;
 use cli::{Cli, Commands, PsOutputCli};
+use env_logger::Target;
 use jocker_lib::common::Exec;
 use jocker_lib::logs::Logs;
 use jocker_lib::ps::Ps;
@@ -15,6 +17,7 @@ use jocker_lib::state::State;
 use jocker_lib::stop::Stop;
 
 use jocker_lib::error::{Error, InnerError, Result};
+use log::info;
 use tabled::settings::Style;
 use tabled::Table;
 use ui::Ui;
@@ -25,8 +28,12 @@ pub async fn main() -> Result<()> {
     let cli = Cli::parse();
     let state = Arc::new(State::new(cli.refresh, cli.stack, cli.target_directory).await?);
     env_logger::Builder::new()
+        .format_file(true)
+        .format_line_number(true)
         .filter_level(cli.verbosity.into())
+        .target(Target::Pipe(Box::new(state.get_log_file()?)))
         .init();
+    info!("Starting jocker");
     match cli.command {
         Commands::Clean(_) => {
             Arc::try_unwrap(state)

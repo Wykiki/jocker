@@ -1145,6 +1145,7 @@ dependencies = [
  "env_logger",
  "futures",
  "jocker-lib",
+ "log",
  "pueue-lib",
  "ratatui",
  "tabled",

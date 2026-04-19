@@ -20,9 +20,10 @@ clap_complete = { workspace = true }
 clap_complete_nushell = { workspace = true }
 clap-verbosity-flag = { workspace = true }
 color-eyre = { workspace = true }
-crossterm =  { workspace = true }
+crossterm = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
+log = { workspace = true }
 ratatui = { workspace = true }
 tabled = { workspace = true }
 tokio = { workspace = true }

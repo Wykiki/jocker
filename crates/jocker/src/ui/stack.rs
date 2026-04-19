@@ -10,11 +10,10 @@ use jocker_lib::state::State;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    style::Style,
     widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
 
-use super::{popup_area, JockerWidget};
+use super::JockerWidget;
 
 #[derive(Debug, Default)]
 struct UiStack {
@@ -37,6 +36,7 @@ impl From<&UiStack> for Row<'_> {
 struct StackState {
     stacks: Vec<UiStack>,
     table_state: TableState,
+    active: bool,
 }
 
 #[derive(Clone)]
@@ -105,20 +105,30 @@ impl JockerWidget for &StackWidget {
         }
     }
 
-    fn run(&self) {
+    fn refresh(&self) {
         StackWidget::run(self)
+    }
+
+    fn is_active(&self) -> bool {
+        self.state.read().unwrap().active
+    }
+
+    fn set_active(&self, state: bool) {
+        self.state.write().unwrap().active = state;
     }
 }
 
 impl Widget for &StackWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let mut state = self.state.write().unwrap();
-        let area = popup_area(area, 60, 20);
+        let state = self.state.read().unwrap();
+        // let area = popup_area(area, 60, 20);
         // frame.render_widget(Clear, area); //this clears out the background
         // frame.render_widget(block, area);
 
         // a block with a right aligned title with the loading state on the right
-        let block = Block::bordered().title("Stacks");
+        let block = Block::bordered()
+            .title("[2] Stacks")
+            .style(self.block_border_style());
 
         // a table with the list of pull requests
         let rows = state.stacks.iter();
@@ -126,9 +136,14 @@ impl Widget for &StackWidget {
         let table = Table::new(rows, widths)
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
-            .highlight_symbol(">>")
-            .row_highlight_style(Style::new().on_blue());
+            .row_highlight_style(self.table_row_highlight_style());
 
-        StatefulWidget::render(table, area, buf, &mut state.table_state);
+        drop(state);
+        StatefulWidget::render(
+            table,
+            area,
+            buf,
+            &mut self.state.write().unwrap().table_state,
+        );
     }
 }
