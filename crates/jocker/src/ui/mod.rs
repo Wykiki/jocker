@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 use jocker_lib::{error::Result, state::State};
+use log::LogWidget;
 use process::ProcessWidget;
 use ratatui::{
     buffer::Buffer,
@@ -14,6 +15,7 @@ use ratatui::{
 };
 use stack::StackWidget;
 
+mod log;
 mod process;
 mod stack;
 mod style;
@@ -42,6 +44,7 @@ pub(crate) trait JockerWidget: Widget {
 }
 
 enum WidgetType {
+    Log(LogWidget),
     Process(ProcessWidget),
     Stack(StackWidget),
 }
@@ -49,6 +52,7 @@ enum WidgetType {
 impl JockerWidget for &WidgetType {
     fn dispatch_keycode(&self, keycode: KeyCode) {
         match self {
+            WidgetType::Log(widget) => widget.dispatch_keycode(keycode),
             WidgetType::Process(widget) => widget.dispatch_keycode(keycode),
             WidgetType::Stack(widget) => widget.dispatch_keycode(keycode),
         }
@@ -56,6 +60,7 @@ impl JockerWidget for &WidgetType {
 
     fn refresh(&self) {
         match self {
+            WidgetType::Log(widget) => widget.refresh(),
             WidgetType::Process(widget) => widget.refresh(),
             WidgetType::Stack(widget) => widget.refresh(),
         }
@@ -63,6 +68,7 @@ impl JockerWidget for &WidgetType {
 
     fn is_active(&self) -> bool {
         match self {
+            WidgetType::Log(widget) => widget.is_active(),
             WidgetType::Process(widget) => widget.is_active(),
             WidgetType::Stack(widget) => widget.is_active(),
         }
@@ -70,6 +76,7 @@ impl JockerWidget for &WidgetType {
 
     fn set_active(&self, state: bool) {
         match self {
+            WidgetType::Log(widget) => widget.set_active(state),
             WidgetType::Process(widget) => widget.set_active(state),
             WidgetType::Stack(widget) => widget.set_active(state),
         }
@@ -82,6 +89,7 @@ impl Widget for &WidgetType {
         Self: Sized,
     {
         match self {
+            WidgetType::Log(widget) => widget.render(area, buf),
             WidgetType::Process(widget) => widget.render(area, buf),
             WidgetType::Stack(widget) => widget.render(area, buf),
         }
@@ -91,6 +99,7 @@ impl Widget for &WidgetType {
 struct Widgets {
     process: Arc<WidgetType>,
     stack: Arc<WidgetType>,
+    log: Arc<WidgetType>,
 }
 
 pub struct UiLayout {
@@ -131,11 +140,16 @@ pub struct Ui {
 
 impl Ui {
     pub fn new(state: Arc<State>) -> Self {
+        let log = Arc::new(WidgetType::Log(LogWidget::new(state.clone())));
         let process = Arc::new(WidgetType::Process(ProcessWidget::new(state.clone())));
         let stack = Arc::new(WidgetType::Stack(StackWidget::new(state.clone())));
         let active_widget = process.clone();
         process.as_ref().set_active(true);
-        let widgets = Widgets { process, stack };
+        let widgets = Widgets {
+            log,
+            process,
+            stack,
+        };
         Self {
             should_quit: false,
             active_widget,
@@ -171,6 +185,7 @@ impl Ui {
             .style(Style::new().blue());
         frame.render_widget(self.widgets.process.as_ref(), layout.processes);
         frame.render_widget(self.widgets.stack.as_ref(), layout.stacks);
+        frame.render_widget(self.widgets.log.as_ref(), layout.logs);
         frame.render_widget(footer, layout.footer);
     }
 
