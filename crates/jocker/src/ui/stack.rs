@@ -87,8 +87,12 @@ impl StackWidget {
     }
 
     fn select_stack(&self) {
-        let offset = self.state.read().unwrap().table_state.offset();
-        let stack = self.state.read().unwrap().stacks[offset].name.clone();
+        let (offset, stack) = {
+            let state = self.state.read().unwrap();
+            let offset = state.table_state.selected().unwrap_or(0);
+            let stack = state.stacks[offset].name.clone();
+            (offset, stack)
+        };
         self.state.write().unwrap().table_state.select(Some(offset));
         let jocker = self.jocker.clone();
         tokio::spawn(async move { jocker.set_current_stack(&Some(stack)).await.unwrap() });

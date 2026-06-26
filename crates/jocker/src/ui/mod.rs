@@ -159,7 +159,7 @@ impl Ui {
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.widgets.process.as_ref().refresh();
-        // self.widgets.stack.as_ref().refresh();
+        self.widgets.stack.as_ref().refresh();
         let mut events = EventStream::new();
 
         while !self.should_quit {
