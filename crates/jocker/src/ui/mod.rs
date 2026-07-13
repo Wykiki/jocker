@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
-use jocker_lib::{error::Result, state::State};
+use jocker_lib::state::State;
 use log::LogWidget;
 use process::ProcessWidget;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::Style,
     text::Line,
     widgets::Widget,
@@ -157,7 +157,7 @@ impl Ui {
         }
     }
 
-    pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         self.widgets.process.as_ref().refresh();
         self.widgets.stack.as_ref().refresh();
         let mut events = EventStream::new();
@@ -215,12 +215,4 @@ impl Ui {
     fn widget(&self) -> &WidgetType {
         &self.active_widget
     }
-}
-
-fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
-    let [area] = vertical.areas(area);
-    let [area] = horizontal.areas(area);
-    area
 }

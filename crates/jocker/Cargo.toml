@@ -21,12 +21,14 @@ clap_complete_nushell = { workspace = true }
 clap-verbosity-flag = { workspace = true }
 color-eyre = { workspace = true }
 crossterm = { workspace = true }
-env_logger = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 ratatui = { workspace = true }
 tabled = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 pueue-lib = { workspace = true }

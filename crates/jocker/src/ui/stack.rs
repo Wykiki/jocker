@@ -12,6 +12,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
+use tracing::trace;
 
 use super::JockerWidget;
 
@@ -124,6 +125,7 @@ impl JockerWidget for &StackWidget {
 
 impl Widget for &StackWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        trace!("render StackWidget");
         let state = self.state.read().unwrap();
         // let area = popup_area(area, 60, 20);
         // frame.render_widget(Clear, area); //this clears out the background

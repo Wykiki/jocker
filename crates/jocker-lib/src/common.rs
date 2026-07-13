@@ -130,18 +130,13 @@ impl PartialOrd for Process {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub enum ProcessState {
+    #[default]
     Stopped,
     Building,
     Running,
     Unknown,
-}
-
-impl Default for ProcessState {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 impl Display for ProcessState {

@@ -12,6 +12,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
+use tracing::trace;
 
 use super::JockerWidget;
 
@@ -137,6 +138,7 @@ impl JockerWidget for &ProcessWidget {
 
 impl Widget for &ProcessWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        trace!("render ProcessWidget");
         let state = self.state.read().unwrap();
         // a block with a right aligned title with the loading state on the right
         let block = Block::bordered()

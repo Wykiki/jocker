@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fs::{canonicalize, create_dir_all, File, OpenOptions},
+    fs::{canonicalize, create_dir_all, File},
     hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -108,11 +108,8 @@ impl State {
         self.db.set_config_updated_at(date).await
     }
 
-    pub fn get_log_file(&self) -> Result<File> {
-        Ok(OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.log_file)?)
+    pub fn get_log_file(&self) -> &str {
+        &self.log_file
     }
 
     pub fn get_target_dir(&self) -> &Path {
@@ -413,7 +410,7 @@ impl State {
             let stack = stacks
                 .get(stack_name)
                 .ok_or_else(|| Error::new(InnerError::StackNotFound(stack_name.to_owned())))?;
-            inherited_processes.extend(stack.processes.clone().into_iter());
+            inherited_processes.extend(stack.processes.clone());
             inherited_processes = Self::recurse_inherited_processes(
                 recursion_level + 1,
                 &stack.inherits,
