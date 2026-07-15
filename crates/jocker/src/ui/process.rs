@@ -21,6 +21,13 @@ struct UiProcess {
     name: String,
     state: ProcessState,
     pid: Option<Pid>,
+    selected: bool,
+}
+
+impl UiProcess {
+    fn toggle_selected(&mut self) {
+        self.selected = !self.selected;
+    }
 }
 
 impl From<Process> for UiProcess {
@@ -29,6 +36,7 @@ impl From<Process> for UiProcess {
             name: value.name,
             state: value.state,
             pid: value.pid,
+            selected: false,
         }
     }
 }
@@ -36,6 +44,11 @@ impl From<Process> for UiProcess {
 impl From<&UiProcess> for Row<'_> {
     fn from(process: &UiProcess) -> Self {
         Row::new(vec![
+            if process.selected {
+                '>'.to_string()
+            } else {
+                ' '.to_string()
+            },
             process.name.clone(),
             process.state.to_string(),
             process.pid.map(|v| v.to_string()).unwrap_or_default(),
@@ -112,6 +125,13 @@ impl ProcessWidget {
     fn scroll_up(&self) {
         self.state.write().unwrap().table_state.scroll_up_by(1);
     }
+
+    fn toggle_select(&self) {
+        let mut state = self.state.write().unwrap();
+        if let Some(index) = state.table_state.selected() {
+            state.processes[index].toggle_selected();
+        }
+    }
 }
 
 impl JockerWidget for &ProcessWidget {
@@ -119,6 +139,7 @@ impl JockerWidget for &ProcessWidget {
         match keycode {
             KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
+            KeyCode::Enter => self.toggle_select(),
             _ => (),
         }
     }
@@ -147,11 +168,13 @@ impl Widget for &ProcessWidget {
 
         // a table with the list of pull requests
         let header = Row::new(vec![
+            Cell::from(""),
             Cell::from("Process"),
             Cell::from("State"),
             Cell::from("PID"),
         ]);
         let widths = [
+            Constraint::Length(1),
             Constraint::Fill(1),
             Constraint::Length(8),
             Constraint::Max(10),
