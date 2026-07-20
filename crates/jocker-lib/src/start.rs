@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use dotenvy::dotenv_iter;
-use log::debug;
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use tracing::debug;
 
 use crate::{
     command::{cargo::Cargo, util::CommandLogger},

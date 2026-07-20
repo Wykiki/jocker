@@ -14,7 +14,11 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use stack::StackWidget;
+use tokio::sync::broadcast::{self, Receiver, Sender};
 
+use crate::ui::event::UiEvent;
+
+mod event;
 mod log;
 mod process;
 mod stack;
@@ -136,12 +140,21 @@ pub struct Ui {
     should_quit: bool,
     widgets: Widgets,
     active_widget: Arc<WidgetType>,
+    event_rx: Receiver<UiEvent>,
+    event_tx: Sender<UiEvent>,
 }
 
 impl Ui {
     pub fn new(state: Arc<State>) -> Self {
-        let log = Arc::new(WidgetType::Log(LogWidget::new(state.clone())));
-        let process = Arc::new(WidgetType::Process(ProcessWidget::new(state.clone())));
+        let (event_tx, event_rx) = broadcast::channel(16);
+        let log = Arc::new(WidgetType::Log(LogWidget::new(
+            state.clone(),
+            event_tx.clone(),
+        )));
+        let process = Arc::new(WidgetType::Process(ProcessWidget::new(
+            state.clone(),
+            event_tx.clone(),
+        )));
         let stack = Arc::new(WidgetType::Stack(StackWidget::new(state.clone())));
         let active_widget = process.clone();
         process.as_ref().set_active(true);
@@ -154,18 +167,21 @@ impl Ui {
             should_quit: false,
             active_widget,
             widgets,
+            event_rx,
+            event_tx,
         }
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         self.widgets.process.as_ref().refresh();
         self.widgets.stack.as_ref().refresh();
+        self.widgets.log.as_ref().refresh();
         let mut events = EventStream::new();
 
         while !self.should_quit {
             terminal.draw(|frame| self.render(frame))?;
             tokio::select! {
-                // _ = interval.tick() => { terminal.draw(|frame| self.render(frame))?; },
+                _ = self.handle_event() => {},
                 Some(Ok(event)) = events.next() => self.handle_term_event(&event),
             }
         }
@@ -187,6 +203,16 @@ impl Ui {
         frame.render_widget(self.widgets.stack.as_ref(), layout.stacks);
         frame.render_widget(self.widgets.log.as_ref(), layout.logs);
         frame.render_widget(footer, layout.footer);
+    }
+
+    async fn handle_event(&mut self) {
+        while let Ok(event) = self.event_rx.recv().await {
+            match event {
+                // Break to render
+                UiEvent::NewLogLine(_) => break,
+                UiEvent::SelectedProcesses(_) | UiEvent::Dummy => continue,
+            }
+        }
     }
 
     fn handle_term_event(&mut self, event: &Event) {

@@ -19,7 +19,10 @@ use tokio::{
     time::sleep,
 };
 
-use crate::error::{Error, InnerError, Result};
+use crate::{
+    error::{Error, InnerError, Result},
+    logs::LogLine,
+};
 
 pub(crate) struct Pueue {
     group: String,
@@ -141,22 +144,22 @@ impl Pueue {
 
     pub(crate) async fn logs(
         &self,
-        log_tx: Sender<String>,
-        process_prefix: &str,
+        log_tx: Sender<LogLine>,
+        process_name: &str,
         pid: usize,
         lines: Option<usize>,
         follow: bool,
     ) -> Result<()> {
         match follow {
-            true => self.follow(log_tx, process_prefix, pid, lines).await,
-            false => self.log(log_tx, process_prefix, pid, lines).await,
+            true => self.follow(log_tx, process_name, pid, lines).await,
+            false => self.log(log_tx, process_name, pid, lines).await,
         }
     }
 
     async fn log(
         &self,
-        log_tx: Sender<String>,
-        process_prefix: &str,
+        log_tx: Sender<LogLine>,
+        process_name: &str,
         pid: usize,
         lines: Option<usize>,
     ) -> Result<()> {
@@ -179,10 +182,7 @@ impl Pueue {
                     std::io::copy(&mut decompressor, &mut buf).unwrap();
                     let content = String::from_utf8(buf)?;
                     for line in content.lines() {
-                        log_tx
-                            .send(format!("{process_prefix}{}", line))
-                            .await
-                            .unwrap();
+                        log_tx.send(LogLine::new(process_name, line)).await.unwrap();
                     }
                 }
             }
@@ -197,8 +197,8 @@ impl Pueue {
 
     async fn follow(
         &self,
-        log_tx: Sender<String>,
-        process_prefix: &str,
+        log_tx: Sender<LogLine>,
+        process_name: &str,
         pid: usize,
         lines: Option<usize>,
     ) -> Result<()> {
@@ -217,10 +217,7 @@ impl Pueue {
                 Response::Stream(response) => {
                     for (_, text) in response.logs {
                         for line in text.lines() {
-                            log_tx
-                                .send(format!("{process_prefix}{}", line))
-                                .await
-                                .unwrap();
+                            log_tx.send(LogLine::new(process_name, line)).await.unwrap();
                         }
                     }
                 }

@@ -12,7 +12,10 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
-use tracing::trace;
+use tokio::sync::broadcast::Sender;
+use tracing::{error, trace};
+
+use crate::ui::event::UiEvent;
 
 use super::JockerWidget;
 
@@ -76,13 +79,15 @@ struct ProcessesState {
 pub(super) struct ProcessWidget {
     state: Arc<RwLock<ProcessesState>>,
     jocker: Arc<State>,
+    event_tx: Sender<UiEvent>,
 }
 
 impl ProcessWidget {
-    pub(super) fn new(jocker: Arc<State>) -> Self {
+    pub(super) fn new(jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Self {
         Self {
             state: Default::default(),
             jocker,
+            event_tx,
         }
     }
 
@@ -127,9 +132,23 @@ impl ProcessWidget {
     }
 
     fn toggle_select(&self) {
+        trace!("ProcessWidget::toggle_select");
         let mut state = self.state.write().unwrap();
         if let Some(index) = state.table_state.selected() {
             state.processes[index].toggle_selected();
+        }
+        let selected_processes = state
+            .processes
+            .iter()
+            .filter(|process| process.selected)
+            .map(|process| process.name.clone())
+            .collect();
+        drop(state);
+        if let Err(e) = self
+            .event_tx
+            .send(UiEvent::SelectedProcesses(selected_processes))
+        {
+            error!("{e}")
         }
     }
 }

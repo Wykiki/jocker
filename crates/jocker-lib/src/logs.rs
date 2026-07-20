@@ -4,6 +4,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     task::JoinSet,
 };
+use tracing::trace;
 
 use crate::{
     common::{Exec, Process, ProcessState},
@@ -11,6 +12,21 @@ use crate::{
 };
 
 use crate::state::State;
+
+#[derive(Debug, Clone)]
+pub struct LogLine {
+    pub process: String,
+    pub line: String,
+}
+
+impl LogLine {
+    pub fn new(process: impl AsRef<str>, line: impl AsRef<str>) -> Self {
+        Self {
+            process: process.as_ref().to_owned(),
+            line: line.as_ref().to_owned(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LogsArgs {
@@ -30,26 +46,13 @@ impl Logs {
         Logs { args, state }
     }
 
-    pub async fn run(&self) -> Result<(JoinSet<Result<()>>, Receiver<String>)> {
+    pub async fn run(&self) -> Result<(JoinSet<Result<()>>, Receiver<LogLine>)> {
         let processes = self.state.filter_processes(&self.args.processes).await?;
         let mut handles = JoinSet::new();
-        let max_process_name_len = processes.iter().fold(0, |acc, e| {
-            if acc < e.name().len() {
-                e.name().len()
-            } else {
-                acc
-            }
-        });
         let (tx, rx) = mpsc::channel(processes.len() * 2);
         for process in processes {
             let state = self.state.clone();
-            handles.spawn(run(
-                state,
-                process,
-                self.args.clone(),
-                max_process_name_len,
-                tx.clone(),
-            ));
+            handles.spawn(run(state, process, self.args.clone(), tx.clone()));
         }
 
         Ok((handles, rx))
@@ -60,8 +63,24 @@ impl Exec<()> for Logs {
     async fn exec(&self) -> Result<()> {
         let (mut handles, mut rx) = self.run().await.unwrap();
 
-        while let Some(message) = rx.recv().await {
-            println!("{message}");
+        let processes = self.state.filter_processes(&self.args.processes).await?;
+        let max_process_name_len = processes.iter().fold(0, |acc, e| {
+            if acc < e.name().len() {
+                e.name().len()
+            } else {
+                acc
+            }
+        });
+
+        while let Some(LogLine {
+            process,
+            line: text,
+        }) = rx.recv().await
+        {
+            if self.args.process_prefix {
+                print!("{process:max_process_name_len$} > ");
+            }
+            println!("{text}");
         }
 
         while (handles.join_next().await).is_some() {}
@@ -74,28 +93,23 @@ async fn run(
     state: Arc<State>,
     process: Process,
     args: LogsArgs,
-    max_process_name_len: usize,
-    log_tx: Sender<String>,
+    log_tx: Sender<LogLine>,
 ) -> Result<()> {
+    trace!(
+        "Start log task for {}, follow = {}, prefix = {}, tail = {}",
+        process.name(),
+        args.follow,
+        args.process_prefix,
+        args.tail
+    );
     let process_name = process.name();
-    // get file
-    // let path = state.filename_log_process(&process);
 
-    // get pos to end of file
-    // let f = File::open(&path).await?;
-    let process_prefix = if args.process_prefix {
-        format!("{process_name:max_process_name_len$} > ")
-    } else {
-        "".to_string()
-    };
     if !args.tail {
-        // let reader = BufReader::new(f);
-        // let mut lines = reader.lines();
         state
             .scheduler()
             .logs(
                 log_tx,
-                &process_prefix,
+                process_name,
                 process.pid().ok_or_else(|| {
                     Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
                         "PID missing for log".to_owned(),
@@ -105,54 +119,19 @@ async fn run(
                 args.follow,
             )
             .await?;
-        // while let Ok(Some(line)) = lines.next_line().await {
-        //     log_tx
-        //         .send(format!("{process_prefix}{}", line))
-        //         .await
-        //         .unwrap();
-        // }
     }
 
     if !args.follow || process.state == ProcessState::Stopped {
         return Ok(());
     }
 
-    // set up watcher
-    // let mut f = File::open(&path).await?;
-    // let mut pos = f.metadata().await?.len();
-    // f.seek(SeekFrom::Start(pos)).await?;
-    // pos = f.metadata().await?.len();
-    // let (tx, rx) = std::sync::mpsc::channel();
-    // let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-    // watcher.watch(path.as_ref(), RecursiveMode::NonRecursive)?;
-    //
-    // // watch
-    // for res in rx {
-    //     match res {
-    //         Ok(_event) => {
-    //             // ignore any event that didn't change the pos
-    //             if f.metadata().await?.len() == pos {
-    //                 continue;
-    //             }
-    //
-    //             // read from pos to end of file
-    //             f.seek(std::io::SeekFrom::Start(pos)).await?;
-    //
-    //             // update post to end of file
-    //             pos = f.metadata().await?.len();
-    //
-    //             let reader = BufReader::new(f.try_clone().await?);
-    //             let mut lines = reader.lines();
-    //             while let Ok(Some(line)) = lines.next_line().await {
-    //                 log_tx
-    //                     .send(format!("{process_prefix}{}", line,))
-    //                     .await
-    //                     .unwrap();
-    //             }
-    //         }
-    //         Err(error) => println!("{error:?}"),
-    //     }
-    // }
+    trace!(
+        "End log task for {}, follow = {}, prefix = {}, tail = {}",
+        process.name(),
+        args.follow,
+        args.process_prefix,
+        args.tail
+    );
 
     Ok(())
 }

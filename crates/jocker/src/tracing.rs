@@ -17,7 +17,6 @@ pub(crate) fn init_tracing(log_file: impl AsRef<Path>) -> Result<WorkerGuard> {
         "failed to create tracing file {}",
         file_path.as_os_str().display(),
     ))?;
-    println!("{}", file_path.as_os_str().display());
     let (non_blocking, guard) = NonBlocking::new(file);
 
     // By default, the subscriber is configured to log all events with a level of `INFO` or higher,
