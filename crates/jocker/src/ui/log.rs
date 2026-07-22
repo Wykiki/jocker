@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, HashMap, VecDeque},
     sync::{Arc, RwLock},
 };
 
@@ -11,8 +11,14 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
 };
-use tokio::{sync::broadcast::Sender, task::JoinHandle};
-use tracing::{error, trace};
+use tokio::{
+    sync::{
+        broadcast::{self, Sender},
+        mpsc,
+    },
+    task::JoinHandle,
+};
+use tracing::{error, trace, warn};
 
 use crate::ui::event::UiEvent;
 
@@ -51,38 +57,47 @@ struct LogState {
 pub(super) struct LogWidget {
     state: Arc<RwLock<LogState>>,
     jocker: Arc<State>,
-    event_tx: Sender<UiEvent>,
+    // event_tx: Sender<UiEvent>,
+    // log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
 }
 
 impl LogWidget {
-    pub(super) fn new(jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Self {
-        Self {
-            state: Default::default(),
-            jocker,
-            event_tx,
-        }
-    }
-
-    fn run(&self) {
-        trace!("LogWidget::run");
-        let this = self.clone();
-        let log_handle = tokio::spawn(this.fetch_logs(vec![]));
-        let this = self.clone();
-        tokio::spawn(this.handle_event());
-        self.state
+    pub(super) async fn new(jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Self {
+        trace!("LogWidget::new");
+        let (log_tx, log_rx) = mpsc::channel(64);
+        let log_handle = tokio::spawn(Self::fetch_logs(jocker.clone(), log_tx.clone(), vec![]));
+        let state: Arc<RwLock<LogState>> = Default::default();
+        state
             .write()
             .inspect_err(|e| error!("{e}"))
             .unwrap()
             .log_handle = Some(log_handle);
+        tokio::spawn(Self::handle_event(
+            state.clone(),
+            jocker.clone(),
+            event_tx,
+            log_rx,
+            log_tx,
+        ));
         // TODO: Do not block here, have asynchronous propagation of fetch
         // while !handle.is_finished() {
         //     sleep(Duration::from_millis(10));
         // }
+        Self {
+            state,
+            jocker,
+            // event_tx,
+            // log_rx,
+            // log_tx,
+        }
     }
 
-    async fn fetch_logs(self, processes: Vec<String>) {
+    async fn fetch_logs(
+        jocker_state: Arc<State>,
+        log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
+        processes: Vec<String>,
+    ) {
         trace!("LogWidget::fetch_logs");
-        let jocker_state = self.jocker;
         let (_log_handle, mut rx) = Logs::new(
             LogsArgs {
                 follow: true,
@@ -96,38 +111,76 @@ impl LogWidget {
         .expect("Cannot fetch logs");
         trace!("LogWidget::fetch_logs will loop");
 
-        while let Some(log_line) = rx.recv().await {
-            trace!(
-                "Received LogLine for process {}: {}",
-                log_line.process,
-                log_line.line
-            );
-            if let Err(e) = self.event_tx.send(UiEvent::NewLogLine(log_line)) {
+        while let Some(log_chunk) = rx.recv().await {
+            trace!("Received logs for UI",);
+            if let Err(e) = log_tx.send(log_chunk).await {
                 error!("{e}");
             }
         }
         trace!("LogWidget::fetch_logs end");
     }
 
-    async fn handle_event(self) {
-        while let Ok(event) = self.event_tx.subscribe().recv().await {
-            trace!("LogWidget::handle_event {event:?}");
-            match event {
-                UiEvent::SelectedProcesses(processes) => {
-                    let mut state = self.state.write().inspect_err(|e| error!("{e}")).unwrap();
-                    if let Some(log_handle) = &state.log_handle {
-                        log_handle.abort();
+    async fn handle_event(
+        state: Arc<RwLock<LogState>>,
+        jocker: Arc<State>,
+        event_tx: broadcast::Sender<UiEvent>,
+        mut log_rx: mpsc::Receiver<BTreeMap<usize, Vec<u8>>>,
+        log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
+    ) -> ! {
+        let mut event_rx = event_tx.subscribe();
+        loop {
+            tokio::select! {
+                Ok(event) = event_rx.recv() => {
+                    match event {
+                        UiEvent::SelectedProcesses(processes) => {
+                            let mut state = state.write().inspect_err(|e| error!("{e}")).unwrap();
+                            if let Some(log_handle) = &state.log_handle {
+                                log_handle.abort();
+                            }
+                            state.logs.clear();
+
+                            let log_handle = tokio::spawn(Self::fetch_logs(
+                                jocker.clone(),
+                                log_tx.clone(),
+                                processes,
+                            ));
+                            state.log_handle = Some(log_handle);
+                        }
+                        UiEvent::Dummy | UiEvent::NewLogs => (),
                     }
-                    state.logs.clear();
-                    let this = self.clone();
-                    let log_handle = tokio::spawn(this.fetch_logs(processes));
-                    state.log_handle = Some(log_handle);
-                }
-                UiEvent::NewLogLine(LogLine { process, line }) => {
-                    let mut state = self.state.write().inspect_err(|e| error!("{e}")).unwrap();
-                    state.logs.push_back(UiLogLine { process, line });
-                }
-                UiEvent::Dummy => continue,
+                },
+                Some(logs_by_pid) = log_rx.recv() => {
+                    let name_by_pid = jocker
+                        .get_processes()
+                        .await.unwrap()
+                        .into_iter()
+                        .filter_map(|p| p.pid.map(|pid| (pid, p.name)))
+                        .collect::<HashMap<_, _>>();
+                    for (pid, log_bytes) in logs_by_pid {
+                        let str = match String::from_utf8(log_bytes) {
+                            Ok(str) => str,
+                            Err(e) => {
+                                error!("unable to read logs for process with pid {pid}: {e}");
+                                continue;
+                            }
+                        };
+                        let lines = str.lines();
+                        let name =  match name_by_pid.get(&pid) {
+                            Some(name) => name.clone(),
+                            None => {
+                                warn!("unable to get process name for pid {pid}");
+                                "".to_owned()
+                            }
+                        };
+                        let mut state = state.write().unwrap();
+                        for line in lines {
+                            state.logs.push_back(UiLogLine { process: name.clone(), line: line.to_owned() });
+                        }
+                    }
+                    if let Err(e) = event_tx.send(UiEvent::NewLogs) {
+                        warn!("unable to send UiEvent::NewLogs event: {e}");
+                    }
+                },
             }
         }
     }
@@ -156,8 +209,7 @@ impl JockerWidget for &LogWidget {
     }
 
     fn refresh(&self) {
-        trace!("Refresh LogWidget");
-        LogWidget::run(self)
+        trace!("Refresh LogWidget : NOOP");
     }
 
     fn is_active(&self) -> bool {

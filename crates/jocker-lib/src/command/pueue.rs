@@ -18,11 +18,9 @@ use tokio::{
     sync::{mpsc::Sender, Mutex},
     time::sleep,
 };
+use tracing::warn;
 
-use crate::{
-    error::{Error, InnerError, Result},
-    logs::LogLine,
-};
+use crate::error::{Error, InnerError, Result};
 
 pub(crate) struct Pueue {
     group: String,
@@ -144,22 +142,20 @@ impl Pueue {
 
     pub(crate) async fn logs(
         &self,
-        log_tx: Sender<LogLine>,
-        process_name: &str,
+        log_tx: Sender<BTreeMap<usize, Vec<u8>>>,
         pid: usize,
         lines: Option<usize>,
         follow: bool,
     ) -> Result<()> {
         match follow {
-            true => self.follow(log_tx, process_name, pid, lines).await,
-            false => self.log(log_tx, process_name, pid, lines).await,
+            true => self.follow(log_tx, pid, lines).await,
+            false => self.log(log_tx, pid, lines).await,
         }
     }
 
     async fn log(
         &self,
-        log_tx: Sender<LogLine>,
-        process_name: &str,
+        log_tx: Sender<BTreeMap<usize, Vec<u8>>>,
         pid: usize,
         lines: Option<usize>,
     ) -> Result<()> {
@@ -175,15 +171,18 @@ impl Pueue {
         let response = client.receive_response().await?;
         match response {
             Response::Log(response) => {
-                for (_, text) in response {
-                    let bytes = text.output.clone().unwrap_or_default();
-                    let mut decompressor = FrameDecoder::new(bytes.as_slice());
-                    let mut buf = vec![];
-                    std::io::copy(&mut decompressor, &mut buf).unwrap();
-                    let content = String::from_utf8(buf)?;
-                    for line in content.lines() {
-                        log_tx.send(LogLine::new(process_name, line)).await.unwrap();
-                    }
+                let msg = response
+                    .into_iter()
+                    .map(|(pid, response)| {
+                        let compressed_bytes = response.output.clone().unwrap_or_default();
+                        let mut decompressor = FrameDecoder::new(compressed_bytes.as_slice());
+                        let mut buf = vec![];
+                        std::io::copy(&mut decompressor, &mut buf).unwrap();
+                        (pid, buf)
+                    })
+                    .collect();
+                if let Err(e) = log_tx.send(msg).await {
+                    warn!("unable to forward pueue log response: {e}");
                 }
             }
             other => {
@@ -197,8 +196,7 @@ impl Pueue {
 
     async fn follow(
         &self,
-        log_tx: Sender<LogLine>,
-        process_name: &str,
+        log_tx: Sender<BTreeMap<usize, Vec<u8>>>,
         pid: usize,
         lines: Option<usize>,
     ) -> Result<()> {
@@ -215,10 +213,13 @@ impl Pueue {
             let response = client.receive_response().await?;
             match response {
                 Response::Stream(response) => {
-                    for (_, text) in response.logs {
-                        for line in text.lines() {
-                            log_tx.send(LogLine::new(process_name, line)).await.unwrap();
-                        }
+                    let entries = response
+                        .logs
+                        .into_iter()
+                        .map(|(pid, text)| (pid, text.into_bytes()))
+                        .collect();
+                    if let Err(e) = log_tx.send(entries).await {
+                        warn!("unable to forward pueue stream response for pid {pid}: {e}");
                     }
                 }
                 Response::Close => break,

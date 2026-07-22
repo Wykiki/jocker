@@ -22,7 +22,6 @@ clap-verbosity-flag = { workspace = true }
 color-eyre = { workspace = true }
 crossterm = { workspace = true }
 futures = { workspace = true }
-log = { workspace = true }
 ratatui = { workspace = true }
 tabled = { workspace = true }
 tokio = { workspace = true }

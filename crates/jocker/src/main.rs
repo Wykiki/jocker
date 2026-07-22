@@ -15,7 +15,7 @@ use jocker_lib::start::Start;
 use jocker_lib::state::State;
 use jocker_lib::stop::Stop;
 
-use log::info;
+use ::tracing::info;
 use tabled::settings::Style;
 use tabled::Table;
 use ui::Ui;
@@ -82,7 +82,7 @@ pub async fn main() -> color_eyre::Result<()> {
         }
         Commands::Ui => {
             let terminal = ratatui::init();
-            let app_result = Ui::new(state.clone()).run(terminal).await;
+            let app_result = Ui::new(state.clone()).await.run(terminal).await;
             ratatui::restore();
             return app_result;
         }

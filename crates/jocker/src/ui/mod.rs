@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
@@ -14,7 +14,10 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use stack::StackWidget;
-use tokio::sync::broadcast::{self, Receiver, Sender};
+use tokio::{
+    sync::broadcast::{self, Receiver, Sender},
+    time::Instant,
+};
 
 use crate::ui::event::UiEvent;
 
@@ -145,12 +148,11 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(state: Arc<State>) -> Self {
+    pub async fn new(state: Arc<State>) -> Self {
         let (event_tx, event_rx) = broadcast::channel(16);
-        let log = Arc::new(WidgetType::Log(LogWidget::new(
-            state.clone(),
-            event_tx.clone(),
-        )));
+        let log = Arc::new(WidgetType::Log(
+            LogWidget::new(state.clone(), event_tx.clone()).await,
+        ));
         let process = Arc::new(WidgetType::Process(ProcessWidget::new(
             state.clone(),
             event_tx.clone(),
@@ -180,8 +182,15 @@ impl Ui {
 
         while !self.should_quit {
             terminal.draw(|frame| self.render(frame))?;
+            let loop_start_timer = Instant::now();
             tokio::select! {
-                _ = self.handle_event() => {},
+                _ = self.handle_event() => {
+                    let fps = Duration::from_millis(40);
+                    let now = Instant::now();
+                    if now - loop_start_timer < fps {
+                        tokio::time::sleep(loop_start_timer + fps - now).await;
+                    }
+                },
                 Some(Ok(event)) = events.next() => self.handle_term_event(&event),
             }
         }
@@ -209,7 +218,7 @@ impl Ui {
         while let Ok(event) = self.event_rx.recv().await {
             match event {
                 // Break to render
-                UiEvent::NewLogLine(_) => break,
+                UiEvent::NewLogs => break,
                 UiEvent::SelectedProcesses(_) | UiEvent::Dummy => continue,
             }
         }
