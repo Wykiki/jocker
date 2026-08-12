@@ -53,12 +53,6 @@ pub(super) struct StackState {
 }
 
 impl StackState {
-    // pub(super) fn spawn(jocker: Arc<State>) -> Self {
-    //     Self {
-    //         state: Default::default(),
-    //         jocker,
-    //     }
-    // }
     pub(super) fn spawn(self, jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Arc<RwLock<Self>> {
         let state: Arc<RwLock<StackState>> = Default::default();
         tokio::spawn(Self::fetch_stacks(
@@ -69,15 +63,6 @@ impl StackState {
         tokio::spawn(Self::handle_event(state.clone(), jocker.clone(), event_tx));
         state
     }
-
-    // fn run(&self) {
-    //     let this = self.clone();
-    //     let handle = tokio::spawn(this.fetch_stacks());
-    //     // TODO: Do not block here, have asynchronous propagation of fetch
-    //     while !handle.is_finished() {
-    //         sleep(Duration::from_millis(10));
-    //     }
-    // }
 
     async fn handle_event(
         state: Arc<RwLock<StackState>>,
@@ -167,45 +152,15 @@ impl JockerWidgetState for StackState {
 }
 
 #[derive(Clone, Default)]
-pub(super) struct StackWidget {
-    // state: Arc<RwLock<StackState>>,
-    // jocker: Arc<State>,
-}
+pub(super) struct StackWidget {}
 
 impl StackWidget {}
-
-// impl JockerWidget for &StackWidget {
-//     // fn dispatch_keycode(&self, keycode: KeyCode) {
-//     //     match keycode {
-//     //         KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
-//     //         KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
-//     //         KeyCode::Char(' ') => self.select_stack(),
-//     //         _ => (),
-//     //     }
-//     // }
-//
-//     fn refresh(&self) {
-//         StackWidget::run(self)
-//     }
-//
-//     fn is_active(&self) -> bool {
-//         self.state.read().unwrap().active
-//     }
-//
-//     fn set_active(&self, state: bool) {
-//         self.state.write().unwrap().active = state;
-//     }
-// }
 
 impl StatefulWidget for &StackWidget {
     type State = StackState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         trace!("render StackWidget");
-        // let area = popup_area(area, 60, 20);
-        // frame.render_widget(Clear, area); //this clears out the background
-        // frame.render_widget(block, area);
-
         // a block with a right aligned title with the loading state on the right
         let block = Block::bordered()
             .title("[2] Stacks")

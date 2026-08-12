@@ -36,7 +36,6 @@ mod style;
 
 pub(crate) trait JockerWidgetState {
     fn is_active(&self) -> bool;
-    // fn set_active(&self, state: bool);
 
     fn block_border_style(&self) -> Style {
         if self.is_active() {
@@ -54,87 +53,6 @@ pub(crate) trait JockerWidgetState {
         }
     }
 }
-
-// pub(crate) trait JockerWidget: StatefulWidget {
-//     // fn dispatch_keycode(&self, user_event: Event);
-//     // fn refresh(&self);
-//     fn is_active(&self) -> bool;
-//     // fn set_active(&self, state: bool);
-//
-//     fn block_border_style(&self) -> Style {
-//         if self.is_active() {
-//             Style::default().green()
-//         } else {
-//             Style::default()
-//         }
-//     }
-//
-//     fn table_row_highlight_style(&self) -> Style {
-//         if self.is_active() {
-//             Style::default().on_blue()
-//         } else {
-//             Style::default()
-//         }
-//     }
-// }
-
-// enum WidgetType {
-//     Log(LogWidget),
-//     Process(ProcessWidget),
-//     Stack(StackWidget),
-// }
-
-// impl JockerWidget for &WidgetType {
-//     // fn dispatch_keycode(&self, user_event: Event) {
-//     //     match self {
-//     //         WidgetType::Log(widget) => widget.dispatch_keycode(user_event),
-//     //         WidgetType::Process(widget) => widget.dispatch_keycode(user_event),
-//     //         WidgetType::Stack(widget) => widget.dispatch_keycode(user_event),
-//     //     }
-//     // }
-//
-//     // fn refresh(&self) {
-//     //     match self {
-//     //         WidgetType::Log(widget) => widget.refresh(),
-//     //         WidgetType::Process(widget) => widget.refresh(),
-//     //         WidgetType::Stack(widget) => widget.refresh(),
-//     //     }
-//     // }
-//
-//     fn is_active(&self) -> bool {
-//         match self {
-//             WidgetType::Log(widget) => widget.is_active(),
-//             WidgetType::Process(widget) => widget.is_active(),
-//             WidgetType::Stack(widget) => widget.is_active(),
-//         }
-//     }
-//
-//     // fn set_active(&self, state: bool) {
-//     //     match self {
-//     //         WidgetType::Log(widget) => widget.set_active(state),
-//     //         WidgetType::Process(widget) => widget.set_active(state),
-//     //         WidgetType::Stack(widget) => widget.set_active(state),
-//     //     }
-//     // }
-// }
-//
-// impl StatefulWidget for &WidgetType {
-//     type State;
-//
-//     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         todo!()
-//     }
-//     // fn render(self, area: Rect, buf: &mut Buffer)
-//     // where
-//     //     Self: Sized,
-//     // {
-//     //     match self {
-//     //         WidgetType::Log(widget) => widget.render(area, buf),
-//     //         WidgetType::Process(widget) => widget.render(area, buf),
-//     //         WidgetType::Stack(widget) => widget.render(area, buf),
-//     //     }
-//     // }
-// }
 
 #[derive(Default)]
 struct Widgets {
@@ -220,23 +138,6 @@ impl Ui {
     pub async fn spawn(state: Arc<State>) -> Self {
         let (event_tx, event_rx) = broadcast::channel(16);
         let states = States::spawn(state.clone(), event_tx.clone()).await;
-        // let stack_state =
-        // let log = Arc::new(WidgetType::Log(
-        //     LogWidget::spawn(state.clone(), event_tx.clone()).await,
-        // ));
-        // let process = Arc::new(WidgetType::Process(ProcessWidget::spawn(
-        //     state.clone(),
-        //     event_tx.clone(),
-        // )));
-        // let stack = Arc::new(WidgetType::Stack(StackWidget::new(state.clone())));
-        // let active_widget = process.clone();
-        // process.as_ref().set_active(true);
-        // let widgets = Widgets {
-        //     log,
-        //     process,
-        //     stack,
-        // };
-        // TODO: Set process as active
         Self {
             states,
             widgets: Default::default(),
@@ -246,9 +147,6 @@ impl Ui {
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
-        // self.widgets.process.as_ref().refresh();
-        // self.widgets.stack.as_ref().refresh();
-        // self.widgets.log.as_ref().refresh();
         let _user_event_handle = tokio::spawn(Self::handle_user_event(self.event_tx.clone()));
 
         let fps = Duration::from_millis(40);
@@ -299,22 +197,12 @@ impl Ui {
 
     async fn handle_event(&mut self, event: UiEvent) -> Option<RenderEvent> {
         match event {
-            // Break to render
             UiEvent::NewLogs
             | UiEvent::SelectProcessWidget
             | UiEvent::SelectStackWidget
             | UiEvent::RenderNeeded => Some(RenderEvent::Render),
-            UiEvent::SelectedProcesses(_) => None,
-            // => {
-            //     // self.activate_widget(self.widgets.process.clone());
-            //     Some(RenderEvent::Render)
-            // }
-            //  => {
-            //     // self.activate_widget(self.widgets.stack.clone());
-            //     Some(RenderEvent::Render)
-            // }
             UiEvent::Quit => Some(RenderEvent::Quit),
-            UiEvent::ActiveWidget(_) => None,
+            UiEvent::SelectedProcesses(_) | UiEvent::ActiveWidget(_) => None,
         }
     }
 
@@ -363,18 +251,4 @@ impl Ui {
         }
         error!("user event loop finished, it should not happen");
     }
-
-    // fn activate_widget(&mut self, new_active: Arc<WidgetType>) {
-    //     self.active_widget.as_ref().set_active(false);
-    //     self.active_widget = new_active;
-    //     self.active_widget.as_ref().set_active(true);
-    // }
-
-    // fn dispatch_keycode(&self, user_event: Event) {
-    //     self.active_widget().dispatch_keycode(user_event);
-    // }
-
-    // fn active_widget(&self) -> &WidgetType {
-    //     &self.active_widget
-    // }
 }

@@ -169,18 +169,6 @@ impl LogState {
             }
         }
     }
-
-    // fn scroll_down(&self) {
-    //     self.state.write().unwrap().table_state.scroll_down_by(1);
-    // }
-    //
-    // fn scroll_up(&self) {
-    //     self.state.write().unwrap().table_state.scroll_up_by(1);
-    // }
-
-    // fn copy_line(&self) {
-    // TODO:
-    // }
 }
 
 impl JockerWidgetState for LogState {
@@ -190,47 +178,13 @@ impl JockerWidgetState for LogState {
 }
 
 #[derive(Default)]
-pub(super) struct LogWidget {
-    // state: Arc<RwLock<LogState>>,
-    // jocker: Arc<State>,
-    // ui_event_handler: JoinHandle<()>,
-    // log_event_handler: JoinHandle<()>,
-    // event_tx: Sender<UiEvent>,
-    // log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
-}
-
-// impl JockerWidget for &LogWidget {
-//     // fn dispatch_keycode(&self, user_event: Event) {
-//     //     match keycode {
-//     //         KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
-//     //         KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
-//     //         KeyCode::Char('y') => self.copy_line(),
-//     //         _ => (),
-//     //     }
-//     // }
-//
-//     fn refresh(&self) {
-//         trace!("Refresh LogWidget : NOOP");
-//     }
-//
-//     fn is_active(&self) -> bool {
-//         self.state.read().unwrap().active
-//     }
-//
-//     fn set_active(&self, state: bool) {
-//         self.state.write().unwrap().active = state;
-//     }
-// }
+pub(super) struct LogWidget {}
 
 impl StatefulWidget for &LogWidget {
     type State = LogState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         trace!("render LogWidget");
-        // let area = popup_area(area, 60, 20);
-        // frame.render_widget(Clear, area); //this clears out the background
-        // frame.render_widget(block, area);
-
         let block = Block::bordered()
             .title("[3] Logs")
             .style(state.block_border_style());

@@ -142,16 +142,6 @@ impl ProcessState {
         }
     }
 
-    // async fn on_load(&self, processes: Vec<Process>) {}
-
-    // async fn on_err(&self, err: &Error) {
-    //     self.set_loading_state(LoadingState::Error(err.to_string()));
-    // }
-    //
-    // fn set_loading_state(&self, state: LoadingState) {
-    //     self.state.write().unwrap().loading_state = state;
-    // }
-
     fn scroll_down(table_state: &mut TableState) -> UiEvent {
         table_state.scroll_down_by(1);
         UiEvent::RenderNeeded
@@ -185,36 +175,7 @@ impl JockerWidgetState for ProcessState {
 }
 
 #[derive(Default)]
-pub(super) struct ProcessWidget {
-    // state: Arc<RwLock<ProcessState>>,
-    // jocker: Arc<State>,
-}
-//
-// impl JockerWidget for &ProcessWidget {
-//     // fn dispatch_keycode(&self, keycode: KeyCode) {
-//     //     match keycode {
-//     //         KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
-//     //         KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
-//     //         KeyCode::Char(' ') => self.toggle_select(),
-//     //         _ => (),
-//     //     }
-//     // }
-//
-//     // fn refresh(&self) {
-//     //     unimplemented!("should not encounter");
-//     //     // ProcessWidget::run(self)
-//     // }
-//
-//     fn is_active(&self) -> bool {
-//         unimplemented!("should not encounter");
-//         false
-//         // self.state.read().unwrap().active
-//     }
-//
-//     // fn set_active(&self, state: bool) {
-//     //     unimplemented!("should not encounter");
-//     // }
-// }
+pub(super) struct ProcessWidget {}
 
 impl StatefulWidget for &ProcessWidget {
     type State = ProcessState;
