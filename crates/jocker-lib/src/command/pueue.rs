@@ -53,7 +53,7 @@ impl Pueue {
         let (settings, _) = Settings::read(&None)?;
         let client = Client::new(settings, true)
             .await
-            .map_err(|e| InnerError::Pueue(pueue_lib::Error::Generic(e.to_string())))?;
+            .map_err(|e| InnerError::Pueue(Box::new(pueue_lib::Error::Generic(e.to_string()))))?;
         Ok(client)
     }
 
@@ -82,9 +82,9 @@ impl Pueue {
         let task_id = match rsp {
             Response::AddedTask(task) => task.task_id,
             e => {
-                return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                    format!("{:?}", e),
-                ))))
+                return Err(Error::new(
+                    pueue_lib::Error::Generic(format!("{:?}", e)).into(),
+                ))
             }
         };
         drop(client);
@@ -126,9 +126,9 @@ impl Pueue {
                     .collect();
                 Ok(tasks)
             }
-            e => Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                format!("{:?}", e),
-            )))),
+            e => Err(Error::new(
+                pueue_lib::Error::Generic(format!("{:?}", e)).into(),
+            )),
         }
     }
 
@@ -186,9 +186,12 @@ impl Pueue {
                 }
             }
             other => {
-                return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                    format!("Received unhandled Response message during logs streaming: {other:?}"),
-                ))))
+                return Err(Error::new(
+                    pueue_lib::Error::Generic(format!(
+                        "Received unhandled Response message during logs streaming: {other:?}"
+                    ))
+                    .into(),
+                ))
             }
         }
         Ok(())
@@ -224,16 +227,18 @@ impl Pueue {
                 }
                 Response::Close => break,
                 Response::Failure(text) => {
-                    return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                        format!("Failure during logs streaming: {text}"),
-                    ))))
+                    return Err(Error::new(
+                        pueue_lib::Error::Generic(format!("Failure during logs streaming: {text}"))
+                            .into(),
+                    ))
                 }
                 other => {
-                    return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                        format!(
+                    return Err(Error::new(
+                        pueue_lib::Error::Generic(format!(
                             "Received unhandled Response message during logs streaming: {other:?}"
-                        ),
-                    ))))
+                        ))
+                        .into(),
+                    ))
                 }
             }
         }
@@ -255,9 +260,9 @@ impl Pueue {
             .await?;
         let rsp = client.receive_response().await?;
         if !rsp.success() {
-            return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                format!("{:?}", rsp),
-            ))));
+            return Err(Error::new(
+                pueue_lib::Error::Generic(format!("{:?}", rsp)).into(),
+            ));
         }
         drop(client);
         while !matches!(
@@ -274,9 +279,9 @@ impl Pueue {
         client.send_request(Request::Remove(vec![pid])).await?;
         let rsp = client.receive_response().await?;
         if !rsp.success() {
-            return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                format!("{:?}", rsp),
-            ))));
+            return Err(Error::new(
+                pueue_lib::Error::Generic(format!("{:?}", rsp)).into(),
+            ));
         }
         drop(client);
         while self.process_status(&pid).await?.is_some() {
@@ -307,9 +312,9 @@ impl Pueue {
             .await?;
         let response = client.receive_response().await?;
         if !response.success() {
-            return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                format!("{:?}", response),
-            ))));
+            return Err(Error::new(
+                pueue_lib::Error::Generic(format!("{:?}", response)).into(),
+            ));
         }
         drop(client);
         while !self.processes().await?.is_empty() {
@@ -326,9 +331,9 @@ impl Pueue {
             .await?;
         let response = client.receive_response().await?;
         if !response.success() {
-            return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                format!("{:?}", response),
-            ))));
+            return Err(Error::new(
+                pueue_lib::Error::Generic(format!("{:?}", response)).into(),
+            ));
         }
         Ok(())
     }
@@ -361,11 +366,9 @@ impl Pueued {
         let mut build = Command::new("pueued");
         build.stdout(Stdio::piped()).stderr(Stdio::piped());
         build.arg("-d");
-        let build = build
-            .spawn()
-            .map_err(Error::with_context(InnerError::Pueue(
-                pueue_lib::Error::Generic("Unable to start `pueued -d` command".to_string()),
-            )))?;
+        let build = build.spawn().map_err(Error::with_context(
+            pueue_lib::Error::Generic("Unable to start `pueued -d` command".to_string()).into(),
+        ))?;
         Ok(build)
     }
 }
@@ -391,9 +394,9 @@ async fn add_group(client: &mut Client, group: &str) -> Result<()> {
         .await?;
     let response = client.receive_response().await?;
     if !response.success() {
-        return Err(Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-            format!("{:?}", response),
-        ))));
+        return Err(Error::new(
+            pueue_lib::Error::Generic(format!("{:?}", response)).into(),
+        ));
     }
     Ok(())
 }

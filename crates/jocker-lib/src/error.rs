@@ -67,10 +67,16 @@ pub enum InnerError {
     Env(String),
     #[error("Filesystem error")]
     Filesystem,
+    #[error("UTF-8 error")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
+    #[error("IO error")]
+    Io(#[from] std::io::Error),
     #[error("Lock error")]
     Lock(String),
     #[error("Parse error")]
     Parse(String),
+    #[error("ParseIntError error")]
+    ParseIntError(#[from] std::num::ParseIntError),
     #[error("Process not found error")]
     ProcessNotFound(Vec<String>),
     #[error("ps error")]
@@ -83,39 +89,94 @@ pub enum InnerError {
     StackNotFound(String),
     #[error("Start stage error")]
     Start(String),
-
-    #[error("UTF-8 error")]
-    FromUtf8Error(#[from] std::string::FromUtf8Error),
-    #[error("IO error")]
-    Io(#[from] std::io::Error),
-    #[error("ParseIntError error")]
-    ParseIntError(#[from] std::num::ParseIntError),
-    #[error("pueue error")]
-    Pueue(#[from] pueue_lib::Error),
-    #[error("redb commit error")]
-    RedbCommit(#[from] redb::CommitError),
-    #[error("redb database error")]
-    RedbDatabase(#[from] redb::DatabaseError),
-    #[error("redb storage error")]
-    RedbStorage(#[from] redb::StorageError),
-    #[error("redb table error")]
-    RedbTable(#[from] redb::TableError),
-    #[error("redb transaction error")]
-    RedbTransaction(#[from] redb::TransactionError),
-    #[error("redb upgrade error")]
-    RedbUpgrade(#[from] redb::UpgradeError),
-    #[error("Serde JSON error")]
-    SerdeJson(#[from] serde_json::Error),
-    #[error("Serde YAML error")]
-    SerdeYaml(#[from] serde_yml::Error),
     #[error("SystemTime error")]
     SystemTime(#[from] std::time::SystemTimeError),
     #[error("TryFromInt error")]
     TryFromInt(#[from] std::num::TryFromIntError),
-    #[error("URL error")]
-    Url(#[from] url::ParseError),
     #[error("Var error")]
     Var(#[from] std::env::VarError),
+
+    // External errors
+    #[error("pueue error")]
+    Pueue(Box<pueue_lib::Error>),
+    #[error("redb commit error")]
+    RedbCommit(Box<redb::CommitError>),
+    #[error("redb database error")]
+    RedbDatabase(Box<redb::DatabaseError>),
+    #[error("redb storage error")]
+    RedbStorage(Box<redb::StorageError>),
+    #[error("redb table error")]
+    RedbTable(Box<redb::TableError>),
+    #[error("redb transaction error")]
+    RedbTransaction(Box<redb::TransactionError>),
+    #[error("redb upgrade error")]
+    RedbUpgrade(Box<redb::UpgradeError>),
+    #[error("Serde JSON error")]
+    SerdeJson(Box<serde_json::Error>),
+    #[error("Serde YAML error")]
+    SerdeYaml(Box<serde_yml::Error>),
+    #[error("URL error")]
+    Url(Box<url::ParseError>),
+}
+
+impl From<pueue_lib::Error> for InnerError {
+    fn from(value: pueue_lib::Error) -> Self {
+        Self::Pueue(Box::new(value))
+    }
+}
+
+impl From<redb::CommitError> for InnerError {
+    fn from(value: redb::CommitError) -> Self {
+        Self::RedbCommit(Box::new(value))
+    }
+}
+
+impl From<redb::DatabaseError> for InnerError {
+    fn from(value: redb::DatabaseError) -> Self {
+        Self::RedbDatabase(Box::new(value))
+    }
+}
+
+impl From<redb::StorageError> for InnerError {
+    fn from(value: redb::StorageError) -> Self {
+        Self::RedbStorage(Box::new(value))
+    }
+}
+
+impl From<redb::TableError> for InnerError {
+    fn from(value: redb::TableError) -> Self {
+        Self::RedbTable(Box::new(value))
+    }
+}
+
+impl From<redb::TransactionError> for InnerError {
+    fn from(value: redb::TransactionError) -> Self {
+        Self::RedbTransaction(Box::new(value))
+    }
+}
+
+impl From<redb::UpgradeError> for InnerError {
+    fn from(value: redb::UpgradeError) -> Self {
+        Self::RedbUpgrade(Box::new(value))
+    }
+}
+
+impl From<serde_json::Error> for InnerError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::SerdeJson(Box::new(value))
+    }
+}
+
+impl From<serde_yml::Error> for InnerError {
+    fn from(value: serde_yml::Error) -> Self {
+        Self::SerdeYaml(Box::new(value))
+    }
+}
+
+impl From<url::ParseError> for InnerError {
+    fn from(value: url::ParseError) -> Self {
+        Self::Url(Box::new(value))
+    }
 }
 
 pub fn lock_error(e: impl Display) -> Error {

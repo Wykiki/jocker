@@ -14,7 +14,7 @@ use tracing::{error, trace, warn};
 
 use crate::{
     common::{Exec, Process, ProcessState},
-    error::{Error, InnerError, Result},
+    error::{Error, Result},
 };
 
 use crate::state::State;
@@ -147,9 +147,7 @@ async fn run(
             .logs(
                 log_tx,
                 process.pid().ok_or_else(|| {
-                    Error::new(InnerError::Pueue(pueue_lib::Error::Generic(
-                        "PID missing for log".to_owned(),
-                    )))
+                    Error::new(pueue_lib::Error::Generic("PID missing for log".to_owned()).into())
                 })?,
                 None,
                 args.follow,
