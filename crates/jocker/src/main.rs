@@ -82,7 +82,7 @@ pub async fn main() -> color_eyre::Result<()> {
         }
         Commands::Ui => {
             let terminal = ratatui::init();
-            let app_result = Ui::new(state.clone()).await.run(terminal).await;
+            let app_result = Ui::spawn(state.clone()).await.run(terminal).await;
             ratatui::restore();
             return app_result;
         }

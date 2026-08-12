@@ -1,29 +1,41 @@
-use std::{
-    sync::{Arc, RwLock},
-    thread::sleep,
-    time::Duration,
-};
+use std::sync::Arc;
 
-use crossterm::event::KeyCode;
 use jocker_lib::common::Stack;
 use jocker_lib::state::State;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
+    widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState},
 };
-use tracing::trace;
+use tokio::sync::{
+    broadcast::{self, Sender},
+    RwLock,
+};
+use tracing::{error, trace};
 
-use super::JockerWidget;
+use crate::ui::{
+    event::{ActiveWidgetEvent, UiEvent},
+    JockerWidgetState,
+};
 
 #[derive(Debug, Default)]
 struct UiStack {
     name: String,
+    selected: bool,
+}
+
+impl UiStack {
+    fn toggle_selected(&mut self) {
+        self.selected = !self.selected;
+    }
 }
 
 impl From<Stack> for UiStack {
     fn from(value: Stack) -> Self {
-        Self { name: value.name }
+        Self {
+            name: value.name,
+            selected: false,
+        }
     }
 }
 
@@ -34,99 +46,162 @@ impl From<&UiStack> for Row<'_> {
 }
 
 #[derive(Debug, Default)]
-struct StackState {
+pub(super) struct StackState {
     stacks: Vec<UiStack>,
     table_state: TableState,
     active: bool,
 }
 
-#[derive(Clone)]
-pub(super) struct StackWidget {
-    state: Arc<RwLock<StackState>>,
-    jocker: Arc<State>,
-}
+impl StackState {
+    // pub(super) fn spawn(jocker: Arc<State>) -> Self {
+    //     Self {
+    //         state: Default::default(),
+    //         jocker,
+    //     }
+    // }
+    pub(super) fn spawn(self, jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Arc<RwLock<Self>> {
+        let state: Arc<RwLock<StackState>> = Default::default();
+        tokio::spawn(Self::fetch_stacks(
+            state.clone(),
+            jocker.clone(),
+            event_tx.clone(),
+        ));
+        tokio::spawn(Self::handle_event(state.clone(), jocker.clone(), event_tx));
+        state
+    }
 
-impl StackWidget {
-    pub(super) fn new(jocker: Arc<State>) -> Self {
-        Self {
-            state: Default::default(),
-            jocker,
+    // fn run(&self) {
+    //     let this = self.clone();
+    //     let handle = tokio::spawn(this.fetch_stacks());
+    //     // TODO: Do not block here, have asynchronous propagation of fetch
+    //     while !handle.is_finished() {
+    //         sleep(Duration::from_millis(10));
+    //     }
+    // }
+
+    async fn handle_event(
+        state: Arc<RwLock<StackState>>,
+        _jocker: Arc<State>,
+        event_tx: Sender<UiEvent>,
+    ) {
+        let mut event_rx = event_tx.subscribe();
+        while let Ok(event) = event_rx.recv().await {
+            let produced_event = match event {
+                UiEvent::ActiveWidget(active_event) if state.read().await.active => {
+                    let mut state = state.write().await;
+                    Some(match active_event {
+                        ActiveWidgetEvent::Down => Self::scroll_down(&mut state.table_state),
+                        ActiveWidgetEvent::Up => Self::scroll_up(&mut state.table_state),
+                        ActiveWidgetEvent::Select => Self::toggle_select(&mut state),
+                    })
+                }
+                UiEvent::SelectProcessWidget => {
+                    state.write().await.active = false;
+                    Some(UiEvent::RenderNeeded)
+                }
+                UiEvent::SelectStackWidget => {
+                    state.write().await.active = true;
+                    Some(UiEvent::RenderNeeded)
+                }
+                _ => None,
+            };
+            if let Some(event) = produced_event {
+                if let Err(e) = event_tx.send(event) {
+                    error!("unable to send ui event: {e}");
+                }
+            }
         }
     }
 
-    fn run(&self) {
-        let this = self.clone();
-        let handle = tokio::spawn(this.fetch_stacks());
-        // TODO: Do not block here, have asynchronous propagation of fetch
-        while !handle.is_finished() {
-            sleep(Duration::from_millis(10));
-        }
-    }
-
-    async fn fetch_stacks(self) {
-        match self.jocker.get_stacks().await {
-            Ok(stacks) => self.on_load(stacks).await,
+    async fn fetch_stacks(
+        state: Arc<RwLock<StackState>>,
+        jocker: Arc<State>,
+        event_tx: broadcast::Sender<UiEvent>,
+    ) {
+        match jocker.get_stacks().await {
+            Ok(stacks) => {
+                let stacks = stacks.into_iter().map(UiStack::from).collect();
+                let mut state = state.write().await;
+                state.stacks = stacks;
+                if !state.stacks.is_empty() {
+                    state.table_state.select(Some(0));
+                }
+                if let Err(e) = event_tx.send(UiEvent::RenderNeeded) {
+                    error!("unable to send ui event: {e}");
+                }
+            }
             Err(err) => todo!("{err}"),
         }
     }
 
-    async fn on_load(&self, stacks: Vec<Stack>) {
-        let stacks = stacks.into_iter().map(UiStack::from).collect();
-        let mut state = self.state.write().unwrap();
-        state.stacks = stacks;
-        if !state.stacks.is_empty() {
-            state.table_state.select(Some(0));
+    fn scroll_down(table_state: &mut TableState) -> UiEvent {
+        table_state.scroll_down_by(1);
+        UiEvent::RenderNeeded
+    }
+
+    fn scroll_up(table_state: &mut TableState) -> UiEvent {
+        table_state.scroll_up_by(1);
+        UiEvent::RenderNeeded
+    }
+
+    fn toggle_select(state: &mut StackState) -> UiEvent {
+        trace!("StackWidget::toggle_select");
+        if let Some(index) = state.table_state.selected() {
+            let stacks_len = state.stacks.len();
+            state.stacks[index % stacks_len].toggle_selected();
         }
-    }
-
-    fn scroll_down(&self) {
-        self.state.write().unwrap().table_state.scroll_down_by(1);
-    }
-
-    fn scroll_up(&self) {
-        self.state.write().unwrap().table_state.scroll_up_by(1);
-    }
-
-    fn select_stack(&self) {
-        let (offset, stack) = {
-            let state = self.state.read().unwrap();
-            let offset = state.table_state.selected().unwrap_or(0);
-            let stack = state.stacks[offset].name.clone();
-            (offset, stack)
-        };
-        self.state.write().unwrap().table_state.select(Some(offset));
-        let jocker = self.jocker.clone();
-        tokio::spawn(async move { jocker.set_current_stack(&Some(stack)).await.unwrap() });
+        let selected_processes = state
+            .stacks
+            .iter()
+            .filter(|stack| stack.selected)
+            .map(|stack| stack.name.clone())
+            .collect();
+        UiEvent::SelectedProcesses(selected_processes)
     }
 }
 
-impl JockerWidget for &StackWidget {
-    fn dispatch_keycode(&self, keycode: KeyCode) {
-        match keycode {
-            KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
-            KeyCode::Char(' ') => self.select_stack(),
-            _ => (),
-        }
-    }
-
-    fn refresh(&self) {
-        StackWidget::run(self)
-    }
-
+impl JockerWidgetState for StackState {
     fn is_active(&self) -> bool {
-        self.state.read().unwrap().active
-    }
-
-    fn set_active(&self, state: bool) {
-        self.state.write().unwrap().active = state;
+        self.active
     }
 }
 
-impl Widget for &StackWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+#[derive(Clone, Default)]
+pub(super) struct StackWidget {
+    // state: Arc<RwLock<StackState>>,
+    // jocker: Arc<State>,
+}
+
+impl StackWidget {}
+
+// impl JockerWidget for &StackWidget {
+//     // fn dispatch_keycode(&self, keycode: KeyCode) {
+//     //     match keycode {
+//     //         KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
+//     //         KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
+//     //         KeyCode::Char(' ') => self.select_stack(),
+//     //         _ => (),
+//     //     }
+//     // }
+//
+//     fn refresh(&self) {
+//         StackWidget::run(self)
+//     }
+//
+//     fn is_active(&self) -> bool {
+//         self.state.read().unwrap().active
+//     }
+//
+//     fn set_active(&self, state: bool) {
+//         self.state.write().unwrap().active = state;
+//     }
+// }
+
+impl StatefulWidget for &StackWidget {
+    type State = StackState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         trace!("render StackWidget");
-        let state = self.state.read().unwrap();
         // let area = popup_area(area, 60, 20);
         // frame.render_widget(Clear, area); //this clears out the background
         // frame.render_widget(block, area);
@@ -134,7 +209,7 @@ impl Widget for &StackWidget {
         // a block with a right aligned title with the loading state on the right
         let block = Block::bordered()
             .title("[2] Stacks")
-            .style(self.block_border_style());
+            .style(state.block_border_style());
 
         // a table with the list of pull requests
         let rows = state.stacks.iter();
@@ -142,14 +217,7 @@ impl Widget for &StackWidget {
         let table = Table::new(rows, widths)
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
-            .row_highlight_style(self.table_row_highlight_style());
-
-        drop(state);
-        StatefulWidget::render(
-            table,
-            area,
-            buf,
-            &mut self.state.write().unwrap().table_state,
-        );
+            .row_highlight_style(state.table_row_highlight_style());
+        StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
 }

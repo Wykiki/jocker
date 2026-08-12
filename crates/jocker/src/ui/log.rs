@@ -1,28 +1,25 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
-use crossterm::event::KeyCode;
 use jocker_lib::logs::{Logs, LogsArgs};
 use jocker_lib::{logs::LogLine, state::State};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Rect},
-    widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
+    widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState},
 };
 use tokio::{
     sync::{
         broadcast::{self, Sender},
-        mpsc,
+        mpsc, RwLock,
     },
     task::JoinHandle,
 };
 use tracing::{error, trace, warn};
 
-use crate::ui::event::UiEvent;
-
-use super::JockerWidget;
+use crate::ui::{event::UiEvent, JockerWidgetState};
 
 #[derive(Debug, Default)]
 struct UiLogLine {
@@ -46,50 +43,37 @@ impl From<&UiLogLine> for Row<'_> {
 }
 
 #[derive(Debug, Default)]
-struct LogState {
+pub(super) struct LogState {
     table_state: TableState,
     logs: VecDeque<UiLogLine>,
     active: bool,
     log_handle: Option<JoinHandle<()>>,
 }
 
-#[derive(Clone)]
-pub(super) struct LogWidget {
-    state: Arc<RwLock<LogState>>,
-    jocker: Arc<State>,
-    // event_tx: Sender<UiEvent>,
-    // log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
-}
-
-impl LogWidget {
-    pub(super) async fn new(jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Self {
+impl LogState {
+    pub(super) async fn spawn(
+        self,
+        jocker: Arc<State>,
+        event_tx: Sender<UiEvent>,
+    ) -> Arc<RwLock<Self>> {
         trace!("LogWidget::new");
         let (log_tx, log_rx) = mpsc::channel(64);
         let log_handle = tokio::spawn(Self::fetch_logs(jocker.clone(), log_tx.clone(), vec![]));
         let state: Arc<RwLock<LogState>> = Default::default();
-        state
-            .write()
-            .inspect_err(|e| error!("{e}"))
-            .unwrap()
-            .log_handle = Some(log_handle);
-        tokio::spawn(Self::handle_event(
+        state.write().await.log_handle = Some(log_handle);
+        tokio::spawn(Self::handle_ui_event(
+            state.clone(),
+            jocker.clone(),
+            event_tx.clone(),
+            log_tx,
+        ));
+        tokio::spawn(Self::handle_log_event(
             state.clone(),
             jocker.clone(),
             event_tx,
             log_rx,
-            log_tx,
         ));
-        // TODO: Do not block here, have asynchronous propagation of fetch
-        // while !handle.is_finished() {
-        //     sleep(Duration::from_millis(10));
-        // }
-        Self {
-            state,
-            jocker,
-            // event_tx,
-            // log_rx,
-            // log_tx,
-        }
+        state
     }
 
     async fn fetch_logs(
@@ -120,118 +104,136 @@ impl LogWidget {
         trace!("LogWidget::fetch_logs end");
     }
 
-    async fn handle_event(
+    async fn handle_log_event(
         state: Arc<RwLock<LogState>>,
         jocker: Arc<State>,
         event_tx: broadcast::Sender<UiEvent>,
         mut log_rx: mpsc::Receiver<BTreeMap<usize, Vec<u8>>>,
-        log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
-    ) -> ! {
-        let mut event_rx = event_tx.subscribe();
-        loop {
-            tokio::select! {
-                Ok(event) = event_rx.recv() => {
-                    match event {
-                        UiEvent::SelectedProcesses(processes) => {
-                            let mut state = state.write().inspect_err(|e| error!("{e}")).unwrap();
-                            if let Some(log_handle) = &state.log_handle {
-                                log_handle.abort();
-                            }
-                            state.logs.clear();
-
-                            let log_handle = tokio::spawn(Self::fetch_logs(
-                                jocker.clone(),
-                                log_tx.clone(),
-                                processes,
-                            ));
-                            state.log_handle = Some(log_handle);
-                        }
-                        UiEvent::Dummy | UiEvent::NewLogs => (),
+    ) {
+        while let Some(logs_by_pid) = log_rx.recv().await {
+            let name_by_pid = jocker
+                .get_processes()
+                .await
+                .unwrap()
+                .into_iter()
+                .filter_map(|p| p.pid.map(|pid| (pid, p.name)))
+                .collect::<HashMap<_, _>>();
+            for (pid, log_bytes) in logs_by_pid {
+                let str = match String::from_utf8(log_bytes) {
+                    Ok(str) => str,
+                    Err(e) => {
+                        error!("unable to read logs for process with pid {pid}: {e}");
+                        continue;
                     }
-                },
-                Some(logs_by_pid) = log_rx.recv() => {
-                    let name_by_pid = jocker
-                        .get_processes()
-                        .await.unwrap()
-                        .into_iter()
-                        .filter_map(|p| p.pid.map(|pid| (pid, p.name)))
-                        .collect::<HashMap<_, _>>();
-                    for (pid, log_bytes) in logs_by_pid {
-                        let str = match String::from_utf8(log_bytes) {
-                            Ok(str) => str,
-                            Err(e) => {
-                                error!("unable to read logs for process with pid {pid}: {e}");
-                                continue;
-                            }
-                        };
-                        let lines = str.lines();
-                        let name =  match name_by_pid.get(&pid) {
-                            Some(name) => name.clone(),
-                            None => {
-                                warn!("unable to get process name for pid {pid}");
-                                "".to_owned()
-                            }
-                        };
-                        let mut state = state.write().unwrap();
-                        for line in lines {
-                            state.logs.push_back(UiLogLine { process: name.clone(), line: line.to_owned() });
-                        }
+                };
+                let lines = str.lines();
+                let name = match name_by_pid.get(&pid) {
+                    Some(name) => name.clone(),
+                    None => {
+                        warn!("unable to get process name for pid {pid}");
+                        "".to_owned()
                     }
-                    if let Err(e) = event_tx.send(UiEvent::NewLogs) {
-                        warn!("unable to send UiEvent::NewLogs event: {e}");
-                    }
-                },
+                };
+                let mut state = state.write().await;
+                for line in lines {
+                    state.logs.push_back(UiLogLine {
+                        process: name.clone(),
+                        line: line.to_owned(),
+                    });
+                }
+            }
+            if let Err(e) = event_tx.send(UiEvent::NewLogs) {
+                warn!("unable to send UiEvent::NewLogs event: {e}");
             }
         }
     }
 
-    fn scroll_down(&self) {
-        self.state.write().unwrap().table_state.scroll_down_by(1);
-    }
+    async fn handle_ui_event(
+        state: Arc<RwLock<LogState>>,
+        jocker: Arc<State>,
+        event_tx: broadcast::Sender<UiEvent>,
+        log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
+    ) {
+        let mut event_rx = event_tx.subscribe();
+        while let Ok(event) = event_rx.recv().await {
+            if let UiEvent::SelectedProcesses(processes) = event {
+                let mut state = state.write().await;
+                if let Some(log_handle) = &state.log_handle {
+                    log_handle.abort();
+                }
+                state.logs.clear();
 
-    fn scroll_up(&self) {
-        self.state.write().unwrap().table_state.scroll_up_by(1);
-    }
-
-    fn copy_line(&self) {
-        // TODO
-    }
-}
-
-impl JockerWidget for &LogWidget {
-    fn dispatch_keycode(&self, keycode: KeyCode) {
-        match keycode {
-            KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
-            KeyCode::Char('y') => self.copy_line(),
-            _ => (),
+                let log_handle =
+                    tokio::spawn(Self::fetch_logs(jocker.clone(), log_tx.clone(), processes));
+                state.log_handle = Some(log_handle);
+            }
         }
     }
 
-    fn refresh(&self) {
-        trace!("Refresh LogWidget : NOOP");
-    }
+    // fn scroll_down(&self) {
+    //     self.state.write().unwrap().table_state.scroll_down_by(1);
+    // }
+    //
+    // fn scroll_up(&self) {
+    //     self.state.write().unwrap().table_state.scroll_up_by(1);
+    // }
 
+    // fn copy_line(&self) {
+    // TODO:
+    // }
+}
+
+impl JockerWidgetState for LogState {
     fn is_active(&self) -> bool {
-        self.state.read().unwrap().active
-    }
-
-    fn set_active(&self, state: bool) {
-        self.state.write().unwrap().active = state;
+        self.active
     }
 }
 
-impl Widget for &LogWidget {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+#[derive(Default)]
+pub(super) struct LogWidget {
+    // state: Arc<RwLock<LogState>>,
+    // jocker: Arc<State>,
+    // ui_event_handler: JoinHandle<()>,
+    // log_event_handler: JoinHandle<()>,
+    // event_tx: Sender<UiEvent>,
+    // log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
+}
+
+// impl JockerWidget for &LogWidget {
+//     // fn dispatch_keycode(&self, user_event: Event) {
+//     //     match keycode {
+//     //         KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
+//     //         KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
+//     //         KeyCode::Char('y') => self.copy_line(),
+//     //         _ => (),
+//     //     }
+//     // }
+//
+//     fn refresh(&self) {
+//         trace!("Refresh LogWidget : NOOP");
+//     }
+//
+//     fn is_active(&self) -> bool {
+//         self.state.read().unwrap().active
+//     }
+//
+//     fn set_active(&self, state: bool) {
+//         self.state.write().unwrap().active = state;
+//     }
+// }
+
+impl StatefulWidget for &LogWidget {
+    type State = LogState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         trace!("render LogWidget");
-        let state = self.state.read().unwrap();
         // let area = popup_area(area, 60, 20);
         // frame.render_widget(Clear, area); //this clears out the background
         // frame.render_widget(block, area);
 
         let block = Block::bordered()
             .title("[3] Logs")
-            .style(self.block_border_style());
+            .style(state.block_border_style());
 
         let header = Row::new(vec!["Process", ""]);
 
@@ -241,14 +243,7 @@ impl Widget for &LogWidget {
             .block(block)
             .header(header)
             .highlight_spacing(HighlightSpacing::Always)
-            .row_highlight_style(self.table_row_highlight_style());
-
-        drop(state);
-        StatefulWidget::render(
-            table,
-            area,
-            buf,
-            &mut self.state.write().unwrap().table_state,
-        );
+            .row_highlight_style(state.table_row_highlight_style());
+        StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
 }
