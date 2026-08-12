@@ -1,4 +1,4 @@
-use common::{clean, setup};
+use crate::common::{clean, setup};
 use jocker_lib::{
     common::{Exec as _, ProcessState},
     logs::{Logs, LogsArgs},
@@ -7,8 +7,6 @@ use jocker_lib::{
     stop::{Stop, StopArgs},
 };
 use pueue_lib::{Client, Request, Response, Settings};
-
-mod common;
 
 #[tokio::test]
 async fn start_log_stop_default() {

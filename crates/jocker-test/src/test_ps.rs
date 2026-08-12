@@ -1,7 +1,5 @@
-use common::{clean, setup};
+use crate::common::{clean, setup};
 use jocker_lib::ps::{Ps, PsArgs};
-
-mod common;
 
 #[tokio::test]
 async fn ps_default() {
