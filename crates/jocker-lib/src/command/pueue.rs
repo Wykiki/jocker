@@ -6,10 +6,12 @@ use std::{
 };
 
 use pueue_lib::{
-    network::message::{
+    message::{
         AddRequest, GroupRequest, KillRequest, LogRequest, ResetRequest, ResetTarget, Signal,
         StreamRequest, TaskSelection,
     },
+    network::socket::ConnectionSettings,
+    secret::read_shared_secret,
     Client, Group, Request, Response, Settings, Task, TaskStatus,
 };
 use snap::read::FrameDecoder;
@@ -51,7 +53,9 @@ impl Pueue {
 
     pub(crate) async fn client() -> Result<Client> {
         let (settings, _) = Settings::read(&None)?;
-        let client = Client::new(settings, true)
+        let connection_settings = ConnectionSettings::try_from(settings.shared.clone())?;
+        let secret = read_shared_secret(&settings.shared.shared_secret_path())?;
+        let client = Client::new(connection_settings, &secret, true)
             .await
             .map_err(|e| InnerError::Pueue(Box::new(pueue_lib::Error::Generic(e.to_string()))))?;
         Ok(client)

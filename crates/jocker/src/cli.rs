@@ -108,7 +108,7 @@ impl From<PsArgsCli> for PsArgs {
 pub struct PsOutputCli {
     name: String,
     state: ProcessState,
-    #[tabled(display_with = "tabled_display_option")]
+    #[tabled(display = "tabled_display_option")]
     pid: Option<usize>,
 }
 

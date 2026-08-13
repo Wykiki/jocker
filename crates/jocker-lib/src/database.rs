@@ -1,7 +1,7 @@
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use chrono::{DateTime, Utc};
-use redb::{ReadableTable, TableDefinition, TypeName, Value};
+use redb::{ReadableDatabase, ReadableTable, TableDefinition, TypeName, Value};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -165,8 +165,7 @@ pub(crate) struct Database {
 impl Database {
     pub(crate) async fn new(database_directory_path: impl AsRef<Path>) -> Result<Self> {
         let database_path = database_directory_path.as_ref().join(DB_FILE);
-        let mut db = redb::Database::create(database_path)?;
-        db.upgrade()?;
+        let db = redb::Database::create(database_path)?;
         let txn = db.begin_write()?;
         {
             txn.open_table(METADATA)?;

@@ -15,13 +15,13 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 dotenvy = { workspace = true }
+noyalib = { workspace = true }
 once_cell = { workspace = true }
 pueue-lib = { workspace = true }
 redb = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yml = { workspace = true }
 schemars = { workspace = true }
 snap = { workspace = true }
 thiserror = { workspace = true }

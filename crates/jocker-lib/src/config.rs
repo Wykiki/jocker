@@ -15,7 +15,7 @@ pub struct ConfigFile {
     pub default: Option<ConfigDefault>,
     #[serde(default)]
     pub stacks: HashMap<String, ConfigStack>,
-    pub processes: HashMap<String, ConfigProcess>,
+    pub processes: HashMap<String, Option<ConfigProcess>>,
 }
 
 impl ConfigFile {
@@ -26,7 +26,8 @@ impl ConfigFile {
         }
         let file = File::open(filepath)?;
         let reader = BufReader::new(file);
-        let res = serde_yml::from_reader(reader)?;
+
+        let res = noyalib::from_reader(reader)?;
         Ok(res)
     }
 }

@@ -109,12 +109,10 @@ pub enum InnerError {
     RedbTable(Box<redb::TableError>),
     #[error("redb transaction error")]
     RedbTransaction(Box<redb::TransactionError>),
-    #[error("redb upgrade error")]
-    RedbUpgrade(Box<redb::UpgradeError>),
     #[error("Serde JSON error")]
     SerdeJson(Box<serde_json::Error>),
     #[error("Serde YAML error")]
-    SerdeYaml(Box<serde_yml::Error>),
+    Noyalib(Box<noyalib::Error>),
     #[error("URL error")]
     Url(Box<url::ParseError>),
 }
@@ -155,21 +153,15 @@ impl From<redb::TransactionError> for InnerError {
     }
 }
 
-impl From<redb::UpgradeError> for InnerError {
-    fn from(value: redb::UpgradeError) -> Self {
-        Self::RedbUpgrade(Box::new(value))
-    }
-}
-
 impl From<serde_json::Error> for InnerError {
     fn from(value: serde_json::Error) -> Self {
         Self::SerdeJson(Box::new(value))
     }
 }
 
-impl From<serde_yml::Error> for InnerError {
-    fn from(value: serde_yml::Error) -> Self {
-        Self::SerdeYaml(Box::new(value))
+impl From<noyalib::Error> for InnerError {
+    fn from(value: noyalib::Error) -> Self {
+        Self::Noyalib(Box::new(value))
     }
 }
 

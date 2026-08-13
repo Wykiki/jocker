@@ -89,14 +89,25 @@ impl Process {
     }
 }
 
-impl From<(String, ConfigProcess)> for Process {
-    fn from(value: (String, ConfigProcess)) -> Self {
+impl From<(String, Option<ConfigProcess>)> for Process {
+    fn from(value: (String, Option<ConfigProcess>)) -> Self {
+        let (binary, args, cargo_args, env) = value
+            .1
+            .map(|v| {
+                (
+                    v.binary.unwrap_or(value.0.clone()),
+                    v.args,
+                    v.cargo_args,
+                    v.env,
+                )
+            })
+            .unwrap_or((value.0.clone(), vec![], vec![], Default::default()));
         Self {
-            binary: value.1.binary.unwrap_or(value.0.clone()),
+            binary,
             name: value.0,
-            args: value.1.args,
-            cargo_args: value.1.cargo_args,
-            env: value.1.env,
+            args,
+            cargo_args,
+            env,
             ..Default::default()
         }
     }

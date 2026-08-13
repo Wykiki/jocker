@@ -6,7 +6,10 @@ use jocker_lib::{
     start::{Start, StartArgs},
     stop::{Stop, StopArgs},
 };
-use pueue_lib::{Client, Request, Response, Settings};
+use pueue_lib::{
+    network::socket::ConnectionSettings, secret::read_shared_secret, Client, Request, Response,
+    Settings,
+};
 
 #[tokio::test]
 async fn start_log_stop_default() {
@@ -236,7 +239,12 @@ async fn start_after_stop() {
     assert_eq!(ps_run_2.len(), 2);
 
     let (settings, _) = Settings::read(&None).unwrap();
-    let mut client = Client::new(settings, true).await.unwrap();
+    let connection_settings = ConnectionSettings::try_from(settings.shared.clone()).unwrap();
+    let secret = read_shared_secret(&settings.shared.shared_secret_path()).unwrap();
+    let mut client = Client::new(connection_settings, &secret, true)
+        .await
+        .unwrap();
+
     client.send_request(Request::Status).await.unwrap();
     if let Response::Status(status) = client.receive_response().await.unwrap() {
         assert_eq!(status.task_ids_in_group(state.scheduler_group()).len(), 2);
