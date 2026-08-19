@@ -55,7 +55,7 @@ impl Logs {
     pub async fn run(&self) -> Result<(JoinSet<Result<()>>, Receiver<BTreeMap<usize, Vec<u8>>>)> {
         let processes = self.state.filter_processes(&self.args.processes).await?;
         let mut handles = JoinSet::new();
-        let (tx, rx) = mpsc::channel(processes.len() * 2);
+        let (tx, rx) = mpsc::channel((processes.len() * 2).max(1));
         for process in processes {
             let state = self.state.clone();
             handles.spawn(run(state, process, self.args.clone(), tx.clone()));
