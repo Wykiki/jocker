@@ -2,6 +2,7 @@ use crate::signal::Shutdown;
 
 #[derive(Debug, Clone)]
 pub enum UiEvent {
+    FetchedProcesses,
     SelectProcessWidget,
     SelectStackWidget,
     SelectedProcesses(Vec<String>),

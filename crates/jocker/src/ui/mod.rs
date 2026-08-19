@@ -203,6 +203,7 @@ impl Ui {
     async fn handle_event(&mut self, event: UiEvent) -> Option<RenderEvent> {
         match event {
             UiEvent::ActiveWidget(_)
+            | UiEvent::FetchedProcesses
             | UiEvent::NewLogs
             | UiEvent::RenderNeeded
             | UiEvent::SelectProcessWidget

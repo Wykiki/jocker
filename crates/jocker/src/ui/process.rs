@@ -100,6 +100,7 @@ impl ProcessState {
                         ActiveWidgetEvent::Select => Self::toggle_select(&mut state),
                     })
                 }
+                UiEvent::FetchedProcesses => Some(UiEvent::SelectedProcesses(vec![])),
                 UiEvent::SelectProcessWidget => {
                     state.write().await.active = true;
                     Some(UiEvent::RenderNeeded)
@@ -116,7 +117,7 @@ impl ProcessState {
                         Some(stack),
                     )
                     .await;
-                    Some(UiEvent::RenderNeeded)
+                    None
                 }
                 _ => None,
             };
@@ -150,7 +151,7 @@ impl ProcessState {
                 if !state.processes.is_empty() {
                     state.table_state.select(Some(0));
                 }
-                if let Err(e) = event_tx.send(UiEvent::RenderNeeded) {
+                if let Err(e) = event_tx.send(UiEvent::FetchedProcesses) {
                     error!("unable to send ui event from ProcessWidget::fetch_processes: {e}");
                 }
             }
