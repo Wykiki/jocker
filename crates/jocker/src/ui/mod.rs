@@ -164,19 +164,12 @@ impl Ui {
         let _user_event_handle = tokio::spawn(Self::handle_user_event(self.event_tx.clone()));
         let _signal_handle = tokio::spawn(Self::handle_shutdown_signal(self.event_tx.clone()));
 
-        let fps = Duration::from_millis(40);
-        let mut previous_render = Instant::now();
         self.draw(&mut terminal).await?;
         while let Ok(event) = self.event_rx.recv().await {
             match self.handle_event(event).await {
                 Some(RenderEvent::Quit) => break,
                 Some(RenderEvent::Render) => {
-                    let now = Instant::now();
-                    // Render only if previous render was done before fps duration
-                    if now - previous_render > fps {
-                        self.draw(&mut terminal).await?;
-                        previous_render = Instant::now();
-                    }
+                    self.draw(&mut terminal).await?;
                 }
                 None => continue,
             }
