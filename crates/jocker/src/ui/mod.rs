@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
@@ -12,12 +12,9 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use stack::StackWidget;
-use tokio::{
-    sync::{
-        broadcast::{self, Receiver, Sender},
-        RwLock, RwLockWriteGuard,
-    },
-    time::Instant,
+use tokio::sync::{
+    broadcast::{self, Receiver, Sender},
+    RwLock, RwLockWriteGuard,
 };
 use tracing::{error, trace, warn};
 

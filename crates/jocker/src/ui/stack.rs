@@ -41,7 +41,14 @@ impl From<Stack> for UiStack {
 
 impl From<&UiStack> for Row<'_> {
     fn from(stack: &UiStack) -> Self {
-        Row::new(vec![stack.name.clone()])
+        Row::new(vec![
+            if stack.selected {
+                '>'.to_string()
+            } else {
+                ' '.to_string()
+            },
+            stack.name.clone(),
+        ])
     }
 }
 
@@ -172,7 +179,7 @@ impl StatefulWidget for &StackWidget {
 
         // a table with the list of pull requests
         let rows = state.stacks.iter();
-        let widths = [Constraint::Fill(1)];
+        let widths = [Constraint::Length(1), Constraint::Fill(1)];
         let table = Table::new(rows, widths)
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
