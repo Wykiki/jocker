@@ -212,16 +212,18 @@ impl Ui {
 
     async fn handle_event(&mut self, event: UiEvent) -> Option<RenderEvent> {
         match event {
-            UiEvent::NewLogs
+            UiEvent::ActiveWidget(_)
+            | UiEvent::NewLogs
+            | UiEvent::RenderNeeded
             | UiEvent::SelectProcessWidget
             | UiEvent::SelectStackWidget
-            | UiEvent::RenderNeeded => Some(RenderEvent::Render),
+            | UiEvent::SelectedProcesses(_)
+            | UiEvent::SelectedStack(_) => Some(RenderEvent::Render),
             UiEvent::Quit => Some(RenderEvent::Quit),
             UiEvent::Signal(signal) => {
                 self.exit_signal = Some(signal);
                 Some(RenderEvent::Quit)
             }
-            UiEvent::SelectedProcesses(_) | UiEvent::ActiveWidget(_) => None,
         }
     }
 

@@ -40,8 +40,8 @@ impl From<Stack> for UiStack {
 }
 
 impl From<&UiStack> for Row<'_> {
-    fn from(process: &UiStack) -> Self {
-        Row::new(vec![process.name.clone()])
+    fn from(stack: &UiStack) -> Self {
+        Row::new(vec![stack.name.clone()])
     }
 }
 
@@ -132,16 +132,20 @@ impl StackState {
     fn toggle_select(state: &mut StackState) -> UiEvent {
         trace!("StackWidget::toggle_select");
         if let Some(index) = state.table_state.selected() {
+            // Disable existing stacks
+            for stack in &mut state.stacks {
+                stack.selected = false;
+            }
             let stacks_len = state.stacks.len();
             state.stacks[index % stacks_len].toggle_selected();
         }
-        let selected_processes = state
+        let selected_stack = state
             .stacks
             .iter()
             .filter(|stack| stack.selected)
             .map(|stack| stack.name.clone())
             .collect();
-        UiEvent::SelectedProcesses(selected_processes)
+        UiEvent::SelectedStack(selected_stack)
     }
 }
 

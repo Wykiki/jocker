@@ -64,7 +64,6 @@ impl From<&UiProcess> for Row<'_> {
 #[derive(Debug, Default)]
 pub(super) struct ProcessState {
     processes: Vec<UiProcess>,
-    // loading_state: LoadingState,
     table_state: TableState,
     active: bool,
 }
@@ -79,6 +78,7 @@ impl ProcessState {
             state.clone(),
             jocker.clone(),
             event_tx.clone(),
+            None,
         ));
         tokio::spawn(Self::handle_event(state.clone(), jocker.clone(), event_tx));
         state
@@ -86,7 +86,7 @@ impl ProcessState {
 
     async fn handle_event(
         state: Arc<RwLock<ProcessState>>,
-        _jocker: Arc<State>,
+        jocker: Arc<State>,
         event_tx: broadcast::Sender<UiEvent>,
     ) {
         let mut event_rx = event_tx.subscribe();
@@ -108,6 +108,16 @@ impl ProcessState {
                     state.write().await.active = false;
                     Some(UiEvent::RenderNeeded)
                 }
+                UiEvent::SelectedStack(stack) => {
+                    Self::fetch_processes(
+                        state.clone(),
+                        jocker.clone(),
+                        event_tx.clone(),
+                        Some(stack),
+                    )
+                    .await;
+                    Some(UiEvent::RenderNeeded)
+                }
                 _ => None,
             };
             if let Some(event) = produced_event {
@@ -122,7 +132,13 @@ impl ProcessState {
         state: Arc<RwLock<ProcessState>>,
         jocker: Arc<State>,
         event_tx: broadcast::Sender<UiEvent>,
+        stack: Option<String>,
     ) {
+        if stack.is_some() {
+            if let Err(e) = jocker.set_current_stack(&stack).await {
+                error!("unable to set current stack: {e}");
+            }
+        }
         match jocker.filter_processes(&[]).await {
             Ok(processes) => {
                 let processes = processes

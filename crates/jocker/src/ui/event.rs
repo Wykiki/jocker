@@ -5,6 +5,7 @@ pub enum UiEvent {
     SelectProcessWidget,
     SelectStackWidget,
     SelectedProcesses(Vec<String>),
+    SelectedStack(String),
     NewLogs,
     Quit,
     /// A termination signal was received and the ui must shut down.
