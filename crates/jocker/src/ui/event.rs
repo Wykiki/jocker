@@ -1,3 +1,5 @@
+use crate::signal::Shutdown;
+
 #[derive(Debug, Clone)]
 pub enum UiEvent {
     SelectProcessWidget,
@@ -5,6 +7,8 @@ pub enum UiEvent {
     SelectedProcesses(Vec<String>),
     NewLogs,
     Quit,
+    /// A termination signal was received and the ui must shut down.
+    Signal(Shutdown),
     RenderNeeded,
     ActiveWidget(ActiveWidgetEvent),
 }
