@@ -1,7 +1,11 @@
+use jocker_lib::event::{JockerAction, JockerEvent};
+
 use crate::signal::Shutdown;
 
 #[derive(Debug, Clone)]
 pub enum UiEvent {
+    JockerAction(JockerAction),
+    JockerEvent(JockerEvent),
     FetchedProcesses,
     SelectProcessWidget,
     SelectStackWidget,
@@ -20,10 +24,16 @@ pub enum ActiveWidgetEvent {
     Down,
     Up,
     Select,
+    Start,
+    Stop,
+    Restart,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum RenderEvent {
     Render,
-    Quit,
+    Quit(
+        /// Set when the ui was stopped by a termination signal rather than by the user.
+        Option<Shutdown>,
+    ),
 }

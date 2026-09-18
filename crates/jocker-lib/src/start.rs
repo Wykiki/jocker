@@ -3,12 +3,14 @@ use std::{collections::HashMap, sync::Arc};
 use dotenvy::dotenv_iter;
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use tokio::sync::mpsc;
 use tracing::debug;
 
 use crate::{
     command::{cargo::Cargo, util::CommandLogger},
     common::{Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
+    event::{JockerEvent, SendOrLog},
     state::State,
 };
 
@@ -64,18 +66,45 @@ impl Start {
         Ok(())
     }
 
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self, event_tx: mpsc::Sender<JockerEvent>) -> Result<()> {
         let processes = self.state.filter_processes(&self.args.processes).await?;
         for process in &processes {
             self.state
                 .set_state(process.name(), ProcessState::Building)
                 .await?;
+            event_tx
+                .send_or_log(JockerEvent::ProcessStateChange((
+                    process.name().to_owned(),
+                    ProcessState::Building,
+                )))
+                .await;
         }
         self.build(processes.as_slice()).await?;
         for process in processes {
             let process_name = process.name().to_string();
+
+            event_tx
+                .send_or_log(JockerEvent::ProcessStateChange((
+                    process_name.clone(),
+                    ProcessState::Starting,
+                )))
+                .await;
+
             if let Err(e) = self.run_process(process).await {
-                println!("Error while starting process {process_name}: {e}")
+                println!("Error while starting process {process_name}: {e}");
+                event_tx
+                    .send_or_log(JockerEvent::ProcessStateChange((
+                        process_name.clone(),
+                        ProcessState::Running,
+                    )))
+                    .await;
+            } else {
+                event_tx
+                    .send_or_log(JockerEvent::ProcessStateChange((
+                        process_name.clone(),
+                        ProcessState::Stopped,
+                    )))
+                    .await;
             }
         }
         Ok(())
@@ -127,7 +156,8 @@ impl Start {
 
 impl Exec<()> for Start {
     async fn exec(&self) -> Result<()> {
-        self.run().await?;
+        let (tx, _rx) = mpsc::channel(64);
+        self.run(tx.clone()).await?;
 
         Ok(())
     }

@@ -3,7 +3,11 @@ use std::{
     sync::Arc,
 };
 
-use jocker_lib::logs::{Logs, LogsArgs};
+use jocker_lib::{
+    common::ProcessState,
+    event::JockerEvent,
+    logs::{Logs, LogsArgs},
+};
 use jocker_lib::{logs::LogLine, state::State};
 use ratatui::{
     buffer::Buffer,
@@ -48,6 +52,7 @@ pub(super) struct LogState {
     logs: VecDeque<UiLogLine>,
     active: bool,
     log_handle: Option<JoinHandle<()>>,
+    selected_processes: Vec<String>,
 }
 
 impl LogState {
@@ -156,18 +161,40 @@ impl LogState {
     ) {
         let mut event_rx = event_tx.subscribe();
         while let Ok(event) = event_rx.recv().await {
-            if let UiEvent::SelectedProcesses(processes) = event {
-                let mut state = state.write().await;
-                if let Some(log_handle) = &state.log_handle {
-                    log_handle.abort();
+            match event {
+                UiEvent::SelectedProcesses(processes) => {
+                    let mut state = state.write().await;
+                    state.selected_processes = processes;
+                    Self::refresh_log_handler(&mut state, jocker.clone(), log_tx.clone());
                 }
-                state.logs.clear();
-
-                let log_handle =
-                    tokio::spawn(Self::fetch_logs(jocker.clone(), log_tx.clone(), processes));
-                state.log_handle = Some(log_handle);
+                UiEvent::JockerEvent(JockerEvent::ProcessStateChange((
+                    _,
+                    ProcessState::Running,
+                ))) => {
+                    let mut state = state.write().await;
+                    Self::refresh_log_handler(&mut state, jocker.clone(), log_tx.clone());
+                }
+                _ => (),
             }
         }
+    }
+
+    fn refresh_log_handler(
+        state: &mut LogState,
+        jocker: Arc<State>,
+        log_tx: mpsc::Sender<BTreeMap<usize, Vec<u8>>>,
+    ) {
+        if let Some(log_handle) = &state.log_handle {
+            log_handle.abort();
+        }
+        state.logs.clear();
+
+        let log_handle = tokio::spawn(Self::fetch_logs(
+            jocker,
+            log_tx.clone(),
+            state.selected_processes.clone(),
+        ));
+        state.log_handle = Some(log_handle);
     }
 }
 
