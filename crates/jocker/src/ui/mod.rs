@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
-use jocker_lib::state::State;
+use jocker_lib::{
+    event::{JockerAction, JockerEvent, SendOrLog},
+    jocker::JockerChannel,
+    state::State,
+};
 use log::LogWidget;
 use process::ProcessWidget;
 use ratatui::{
@@ -13,8 +17,8 @@ use ratatui::{
 };
 use stack::StackWidget;
 use tokio::sync::{
-    broadcast::{self, Receiver, Sender},
-    RwLock, RwLockWriteGuard,
+    broadcast::{self},
+    mpsc, RwLock, RwLockWriteGuard,
 };
 use tracing::{error, trace, warn};
 
@@ -68,7 +72,7 @@ struct States {
 }
 
 impl States {
-    async fn spawn(jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Self {
+    async fn spawn(jocker: Arc<State>, event_tx: broadcast::Sender<UiEvent>) -> Self {
         Self {
             process: ProcessState::default().spawn(jocker.clone(), event_tx.clone()),
             stack: StackState::default().spawn(jocker.clone(), event_tx.clone()),
@@ -126,52 +130,47 @@ impl UiLayout {
 }
 
 pub struct Ui {
-    // should_quit: bool,
     widgets: Widgets,
     states: States,
-    // active_widget: Arc<WidgetType>,
-    event_rx: Receiver<UiEvent>,
-    event_tx: Sender<UiEvent>,
-    /// Set when the ui was stopped by a termination signal rather than by the user.
-    exit_signal: Option<Shutdown>,
 }
 
 impl Ui {
-    pub async fn spawn(state: Arc<State>) -> Self {
-        let (event_tx, event_rx) = broadcast::channel(16);
-        let states = States::spawn(state.clone(), event_tx.clone()).await;
-        Self {
-            states,
-            widgets: Default::default(),
-            event_rx,
-            event_tx,
-            exit_signal: None,
-        }
-    }
-
     /// Runs the ui event loop until the user quits or a termination signal is received.
     ///
     /// Returns the signal that caused the shutdown, if any, so the caller can exit with the
     /// matching status code. The terminal is *not* restored here: it stays the caller's
     /// responsibility, as it also owns [`ratatui::init()`].
-    pub async fn run(
-        mut self,
+    pub async fn spawn(
+        state: Arc<State>,
+        channels: JockerChannel,
+
         mut terminal: DefaultTerminal,
     ) -> color_eyre::Result<Option<Shutdown>> {
-        let _user_event_handle = tokio::spawn(Self::handle_user_event(self.event_tx.clone()));
-        let _signal_handle = tokio::spawn(Self::handle_shutdown_signal(self.event_tx.clone()));
+        let (event_tx, mut event_rx) = broadcast::channel(16);
+        let states = States::spawn(state.clone(), event_tx.clone()).await;
+        let (jocker_action_tx, jocker_event_rx) = channels.into_inner();
 
-        self.draw(&mut terminal).await?;
-        while let Ok(event) = self.event_rx.recv().await {
-            match self.handle_event(event).await {
-                Some(RenderEvent::Quit) => break,
+        let _user_event_handle = tokio::spawn(Self::handle_user_event(event_tx.clone()));
+        let _jocker_event_handle =
+            tokio::spawn(Self::handle_jocker_event(event_tx.clone(), jocker_event_rx));
+        let _signal_handle = tokio::spawn(Self::handle_shutdown_signal(event_tx.clone()));
+
+        let this = Self {
+            states,
+            widgets: Default::default(),
+        };
+
+        this.draw(&mut terminal).await?;
+        while let Ok(event) = event_rx.recv().await {
+            match Self::handle_event(&jocker_action_tx, event).await {
+                Some(RenderEvent::Quit(signal)) => return Ok(signal),
                 Some(RenderEvent::Render) => {
-                    self.draw(&mut terminal).await?;
+                    this.draw(&mut terminal).await?;
                 }
                 None => continue,
             }
         }
-        Ok(self.exit_signal)
+        Ok(None)
     }
 
     async fn draw(&self, terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
@@ -200,8 +199,15 @@ impl Ui {
         frame.render_widget(footer, layout.footer);
     }
 
-    async fn handle_event(&mut self, event: UiEvent) -> Option<RenderEvent> {
+    async fn handle_event(
+        jocker_action_tx: &mpsc::Sender<JockerAction>,
+        event: UiEvent,
+    ) -> Option<RenderEvent> {
         match event {
+            UiEvent::JockerAction(action) => {
+                jocker_action_tx.send_or_log(action).await;
+                None
+            }
             UiEvent::ActiveWidget(_)
             | UiEvent::FetchedProcesses
             | UiEvent::NewLogs
@@ -210,10 +216,15 @@ impl Ui {
             | UiEvent::SelectStackWidget
             | UiEvent::SelectedProcesses(_)
             | UiEvent::SelectedStack(_) => Some(RenderEvent::Render),
-            UiEvent::Quit => Some(RenderEvent::Quit),
-            UiEvent::Signal(signal) => {
-                self.exit_signal = Some(signal);
-                Some(RenderEvent::Quit)
+            UiEvent::Quit => Some(RenderEvent::Quit(None)),
+            UiEvent::JockerEvent(JockerEvent::Abort(reason)) => {
+                error!("Stopping due to abort event: {reason}");
+                Some(RenderEvent::Quit(None))
+            }
+            UiEvent::Signal(signal) => Some(RenderEvent::Quit(Some(signal))),
+            UiEvent::JockerEvent(event) => {
+                warn!("Unhandled JockerEvent {event:?}");
+                None
             }
         }
     }
@@ -227,7 +238,7 @@ impl Ui {
     /// if a second signal arrives in the meantime, the terminal is restored from here and the
     /// process exits right away: a stuck task must never leave the user with an unusable terminal.
     /// On the normal path this task is dropped along with the runtime long before that happens.
-    async fn handle_shutdown_signal(event_tx: Sender<UiEvent>) {
+    async fn handle_shutdown_signal(event_tx: broadcast::Sender<UiEvent>) {
         let signal = match shutdown_signal().await {
             Ok(signal) => signal,
             Err(e) => {
@@ -254,7 +265,7 @@ impl Ui {
         std::process::exit(signal.exit_code());
     }
 
-    async fn handle_user_event(event_tx: Sender<UiEvent>) {
+    async fn handle_user_event(event_tx: broadcast::Sender<UiEvent>) {
         let mut events = EventStream::new();
         while let Some(Ok(event)) = events.next().await {
             // let event = events.next().fuse().await;
@@ -266,6 +277,19 @@ impl Ui {
             }
         }
         error!("user event loop finished, it should not happen");
+    }
+
+    async fn handle_jocker_event(
+        event_tx: broadcast::Sender<UiEvent>,
+        mut jocker_event_rx: mpsc::Receiver<JockerEvent>,
+    ) {
+        while let Some(jocker_event) = jocker_event_rx.recv().await {
+            trace!("received jocker event {jocker_event:?}");
+            event_tx
+                .send_or_log(UiEvent::JockerEvent(jocker_event))
+                .await;
+        }
+        error!("jocker event loop finished, it should not happen");
     }
 
     /// Maps a terminal event to the ui event it triggers, if any.
@@ -309,6 +333,21 @@ impl Ui {
                 code: KeyCode::Char(' '),
                 ..
             }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Select)),
+            Event::Key(KeyEvent {
+                kind: KeyEventKind::Press,
+                code: KeyCode::Char('s'),
+                ..
+            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Start)),
+            Event::Key(KeyEvent {
+                kind: KeyEventKind::Press,
+                code: KeyCode::Char('S'),
+                ..
+            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Stop)),
+            Event::Key(KeyEvent {
+                kind: KeyEventKind::Press,
+                code: KeyCode::Char('r'),
+                ..
+            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Restart)),
             _ => None,
         }
     }

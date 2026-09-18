@@ -8,7 +8,7 @@ use ratatui::{
     widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState},
 };
 use tokio::sync::{
-    broadcast::{self, Sender},
+    broadcast::{self},
     RwLock,
 };
 use tracing::{error, trace};
@@ -60,7 +60,11 @@ pub(super) struct StackState {
 }
 
 impl StackState {
-    pub(super) fn spawn(self, jocker: Arc<State>, event_tx: Sender<UiEvent>) -> Arc<RwLock<Self>> {
+    pub(super) fn spawn(
+        self,
+        jocker: Arc<State>,
+        event_tx: broadcast::Sender<UiEvent>,
+    ) -> Arc<RwLock<Self>> {
         let state: Arc<RwLock<StackState>> = Default::default();
         tokio::spawn(Self::fetch_stacks(
             state.clone(),
@@ -74,18 +78,19 @@ impl StackState {
     async fn handle_event(
         state: Arc<RwLock<StackState>>,
         _jocker: Arc<State>,
-        event_tx: Sender<UiEvent>,
+        event_tx: broadcast::Sender<UiEvent>,
     ) {
         let mut event_rx = event_tx.subscribe();
         while let Ok(event) = event_rx.recv().await {
             let produced_event = match event {
                 UiEvent::ActiveWidget(active_event) if state.read().await.active => {
                     let mut state = state.write().await;
-                    Some(match active_event {
-                        ActiveWidgetEvent::Down => Self::scroll_down(&mut state.table_state),
-                        ActiveWidgetEvent::Up => Self::scroll_up(&mut state.table_state),
-                        ActiveWidgetEvent::Select => Self::toggle_select(&mut state),
-                    })
+                    match active_event {
+                        ActiveWidgetEvent::Down => Some(Self::scroll_down(&mut state.table_state)),
+                        ActiveWidgetEvent::Up => Some(Self::scroll_up(&mut state.table_state)),
+                        ActiveWidgetEvent::Select => Some(Self::toggle_select(&mut state)),
+                        _ => None,
+                    }
                 }
                 UiEvent::SelectProcessWidget => {
                     state.write().await.active = false;

@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "ares",
-  "common",
-  "eris",
-  "harmonia",
-]
+members = ["ares", "common", "eris", "harmonia"]
 
 [workspace.package]
 authors = ["Wykiki <wykiki@wyki.io>"]

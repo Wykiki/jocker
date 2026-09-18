@@ -146,6 +146,7 @@ pub enum ProcessState {
     #[default]
     Stopped,
     Building,
+    Starting,
     Running,
     Unknown,
 }
@@ -155,6 +156,7 @@ impl Display for ProcessState {
         let str = match self {
             ProcessState::Stopped => "stopped",
             ProcessState::Building => "building",
+            ProcessState::Starting => "starting",
             ProcessState::Running => "running",
             ProcessState::Unknown => "unknown",
         };

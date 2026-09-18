@@ -10,6 +10,7 @@ use clap::{CommandFactory as _, Parser as _};
 use clap_complete::generate;
 use cli::{Cli, Commands, PsOutputCli};
 use jocker_lib::common::Exec;
+use jocker_lib::jocker::Jocker;
 use jocker_lib::logs::Logs;
 use jocker_lib::ps::Ps;
 use jocker_lib::start::Start;
@@ -28,11 +29,10 @@ use crate::tracing::init_tracing;
 pub async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let cli = Cli::parse();
-    let state = Arc::new(
-        State::new(cli.refresh, cli.stack, cli.target_directory)
-            .await
-            .map_err(color_eyre::Report::new)?,
-    );
+    let (jocker, channels) = Jocker::new(cli.refresh, cli.stack, cli.target_directory)
+        .await
+        .map_err(color_eyre::Report::new)?;
+    let state = jocker.state();
     let guard = init_tracing(state.get_log_file())?;
     info!("Starting jocker");
 
@@ -44,7 +44,7 @@ pub async fn main() -> color_eyre::Result<()> {
         // could drop the terminal mid-draw and skip `ratatui::restore()`.
         Commands::Ui => {
             let terminal = ratatui::init();
-            let result = Ui::spawn(state.clone()).await.run(terminal).await;
+            let result = Ui::spawn(state.clone(), channels, terminal).await;
             ratatui::restore();
             if let Some(signal) = result? {
                 info!("ui stopped by {signal}");

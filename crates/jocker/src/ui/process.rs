@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use jocker_lib::{
     common::{Process, ProcessState as JockerProcessState},
+    event::{JockerAction, JockerEvent},
     state::State,
     Pid,
 };
@@ -92,13 +93,24 @@ impl ProcessState {
         let mut event_rx = event_tx.subscribe();
         while let Ok(event) = event_rx.recv().await {
             let produced_event = match event {
+                UiEvent::JockerEvent(jocker_event) => {
+                    let mut state = state.write().await;
+                    match jocker_event {
+                        JockerEvent::ProcessStateChange((process, process_state)) => {
+                            Self::set_process_status(&mut state, process, process_state)
+                        }
+                        _ => None,
+                    }
+                }
                 UiEvent::ActiveWidget(active_event) if state.read().await.active => {
                     let mut state = state.write().await;
-                    Some(match active_event {
-                        ActiveWidgetEvent::Down => Self::scroll_down(&mut state.table_state),
-                        ActiveWidgetEvent::Up => Self::scroll_up(&mut state.table_state),
-                        ActiveWidgetEvent::Select => Self::toggle_select(&mut state),
-                    })
+                    match active_event {
+                        ActiveWidgetEvent::Down => Some(Self::scroll_down(&mut state.table_state)),
+                        ActiveWidgetEvent::Up => Some(Self::scroll_up(&mut state.table_state)),
+                        ActiveWidgetEvent::Select => Some(Self::toggle_select(&mut state)),
+                        ActiveWidgetEvent::Start => Some(Self::start_selected(&mut state)),
+                        _ => None,
+                    }
                 }
                 UiEvent::FetchedProcesses => Some(UiEvent::SelectedProcesses(vec![])),
                 UiEvent::SelectProcessWidget => {
@@ -159,6 +171,15 @@ impl ProcessState {
         }
     }
 
+    fn get_selected_processes(state: &mut ProcessState) -> Vec<String> {
+        state
+            .processes
+            .iter()
+            .filter(|process| process.selected)
+            .map(|process| process.name.clone())
+            .collect()
+    }
+
     fn scroll_down(table_state: &mut TableState) -> UiEvent {
         table_state.scroll_down_by(1);
         UiEvent::RenderNeeded
@@ -169,18 +190,34 @@ impl ProcessState {
         UiEvent::RenderNeeded
     }
 
+    fn set_process_status(
+        process_state: &mut ProcessState,
+        process: String,
+        status: JockerProcessState,
+    ) -> Option<UiEvent> {
+        process_state
+            .processes
+            .binary_search_by(|v| v.name.cmp(&process))
+            .ok()
+            .map(|i| {
+                process_state.processes[i].state = status;
+                UiEvent::RenderNeeded
+            })
+    }
+
+    fn start_selected(state: &mut ProcessState) -> UiEvent {
+        trace!("ProcessWidget::start_selected");
+        let selected_processes = Self::get_selected_processes(state);
+        UiEvent::JockerAction(JockerAction::Start(selected_processes))
+    }
+
     fn toggle_select(state: &mut ProcessState) -> UiEvent {
         trace!("ProcessWidget::toggle_select");
         if let Some(index) = state.table_state.selected() {
             let processes_len = state.processes.len();
             state.processes[index % processes_len].toggle_selected();
         }
-        let selected_processes = state
-            .processes
-            .iter()
-            .filter(|process| process.selected)
-            .map(|process| process.name.clone())
-            .collect();
+        let selected_processes = Self::get_selected_processes(state);
         UiEvent::SelectedProcesses(selected_processes)
     }
 }
