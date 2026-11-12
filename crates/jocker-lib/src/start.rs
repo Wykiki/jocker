@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tracing::debug;
 
 use crate::{
+    Pid,
     command::{cargo::Cargo, util::CommandLogger},
     common::{Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
@@ -82,22 +83,44 @@ impl Start {
         self.build(processes.as_slice()).await?;
         for process in processes {
             let process_name = process.name().to_string();
-
-            if let Err(e) = self.run_process(process, event_tx.clone()).await {
-                println!("Error while starting process {process_name}: {e}");
-                event_tx
-                    .send_or_log(JockerEvent::ProcessStateChange((
-                        process_name.clone(),
-                        ProcessState::Stopped,
-                    )))
-                    .await;
-                event_tx
-                    .send_or_log(JockerEvent::Message(JockerMessage::ProcessStartError(
-                        process_name.clone(),
-                        e.to_string(),
-                    )))
-                    .await;
-            }
+            event_tx
+                .send_or_log(JockerEvent::ProcessStateChange((
+                    process_name.clone(),
+                    ProcessState::Starting,
+                )))
+                .await;
+            match self.run_process(process, event_tx.clone()).await {
+                Ok(pid) => {
+                    self.state
+                        .set_state(&process_name, ProcessState::Running)
+                        .await?;
+                    self.state.set_pid(&process_name, Some(pid)).await?;
+                    event_tx
+                        .send_or_log(JockerEvent::ProcessStateChange((
+                            process_name.clone(),
+                            ProcessState::Running,
+                        )))
+                        .await;
+                }
+                Err(e) => {
+                    self.state
+                        .set_state(&process_name, ProcessState::Stopped)
+                        .await?;
+                    self.state.set_pid(&process_name, None).await?;
+                    event_tx
+                        .send_or_log(JockerEvent::ProcessStateChange((
+                            process_name.clone(),
+                            ProcessState::Stopped,
+                        )))
+                        .await;
+                    event_tx
+                        .send_or_log(JockerEvent::Message(JockerMessage::ProcessStartError(
+                            process_name.clone(),
+                            e.to_string(),
+                        )))
+                        .await;
+                }
+            };
         }
         Ok(())
     }
@@ -106,22 +129,19 @@ impl Start {
         &self,
         process: Process,
         event_tx: mpsc::Sender<JockerEvent>,
-    ) -> Result<()> {
+    ) -> Result<Pid> {
         let process_name = process.name().to_string();
-        if process.state != ProcessState::Stopped && process.state != ProcessState::Building {
+        if let Some(pid) = process.pid
+            && process.state != ProcessState::Stopped
+            && process.state != ProcessState::Building
+        {
             event_tx
                 .send_or_log(JockerEvent::Message(JockerMessage::ProcessAlreadyStarted(
                     process_name,
                 )))
                 .await;
-            return Ok(());
+            return Ok(pid);
         }
-        event_tx
-            .send_or_log(JockerEvent::ProcessStateChange((
-                process_name.clone(),
-                ProcessState::Starting,
-            )))
-            .await;
         let mut env: HashMap<String, String> = HashMap::new();
         if let Ok(dotenv) = dotenv_iter() {
             for (key, val) in dotenv.flatten() {
@@ -150,17 +170,7 @@ impl Start {
                 env,
             )
             .await?;
-        self.state
-            .set_state(process.name(), ProcessState::Running)
-            .await?;
-        self.state.set_pid(process.name(), Some(pid)).await?;
-        event_tx
-            .send_or_log(JockerEvent::ProcessStateChange((
-                process_name.clone(),
-                ProcessState::Running,
-            )))
-            .await;
-        Ok(())
+        Ok(pid)
     }
 }
 
