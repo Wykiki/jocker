@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::event::{JockerAction, JockerEvent, SendOrLog};
 use crate::start::{Start, StartArgs};
 use crate::state::State;
+use crate::stop::{Stop, StopArgs};
 use crate::types::ProcessName;
 
 pub struct JockerChannel {
@@ -63,6 +64,7 @@ impl Jocker {
 #[derive(Default)]
 struct ActionHandles {
     start_handle: Option<JoinHandle<Result<()>>>,
+    stop_handle: Option<JoinHandle<Result<()>>>,
 }
 
 async fn receive(
@@ -73,12 +75,21 @@ async fn receive(
     let mut handles = ActionHandles::default();
     while let Some(event) = action_rx.recv().await {
         match event {
+            JockerAction::Restart(processes) => {
+                todo!("");
+            }
             JockerAction::Start(processes) => {
                 if let Some(handle) = handles.start_handle {
                     handle.abort();
                 }
                 handles.start_handle =
                     Some(start(state.clone(), event_tx.clone(), processes).await);
+            }
+            JockerAction::Stop(processes) => {
+                if let Some(handle) = handles.stop_handle {
+                    handle.abort();
+                }
+                handles.stop_handle = Some(stop(state.clone(), event_tx.clone(), processes).await);
             }
             _ => unimplemented!(),
         }
@@ -100,5 +111,24 @@ pub async fn start(
         Start::new(StartArgs { processes }, state.clone())
             .run(event_tx.clone())
             .await
+    })
+}
+
+pub async fn stop(
+    state: Arc<State>,
+    event_tx: mpsc::Sender<JockerEvent>,
+    processes: Vec<ProcessName>,
+) -> JoinHandle<Result<()>> {
+    trace!("Jocker::stop");
+    tokio::spawn(async move {
+        Stop::new(
+            StopArgs {
+                processes,
+                kill: false,
+            },
+            state.clone(),
+        )
+        .run(event_tx.clone())
+        .await
     })
 }

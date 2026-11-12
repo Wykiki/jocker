@@ -108,11 +108,13 @@ impl ProcessState {
                         ActiveWidgetEvent::Down => Some(Self::scroll_down(&mut state.table_state)),
                         ActiveWidgetEvent::Up => Some(Self::scroll_up(&mut state.table_state)),
                         ActiveWidgetEvent::Select => Some(Self::toggle_select(&mut state)),
-                        ActiveWidgetEvent::Start => Some(Self::start_selected(&mut state)),
-                        _ => None,
                     }
                 }
                 UiEvent::FetchedProcesses => Some(UiEvent::SelectedProcesses(vec![])),
+                UiEvent::RestartProcesses => {
+                    let mut state = state.write().await;
+                    Some(Self::restart_selected(&mut state))
+                }
                 UiEvent::SelectProcessWidget => {
                     state.write().await.active = true;
                     Some(UiEvent::RenderNeeded)
@@ -130,6 +132,14 @@ impl ProcessState {
                     )
                     .await;
                     None
+                }
+                UiEvent::StartProcesses => {
+                    let mut state = state.write().await;
+                    Some(Self::start_selected(&mut state))
+                }
+                UiEvent::StopProcesses => {
+                    let mut state = state.write().await;
+                    Some(Self::stop_selected(&mut state))
                 }
                 _ => None,
             };
@@ -180,6 +190,12 @@ impl ProcessState {
             .collect()
     }
 
+    fn restart_selected(state: &mut ProcessState) -> UiEvent {
+        trace!("ProcessWidget::restart_selected");
+        let selected_processes = Self::get_selected_processes(state);
+        UiEvent::JockerAction(JockerAction::Restart(selected_processes))
+    }
+
     fn scroll_down(table_state: &mut TableState) -> UiEvent {
         table_state.scroll_down_by(1);
         UiEvent::RenderNeeded
@@ -209,6 +225,12 @@ impl ProcessState {
         trace!("ProcessWidget::start_selected");
         let selected_processes = Self::get_selected_processes(state);
         UiEvent::JockerAction(JockerAction::Start(selected_processes))
+    }
+
+    fn stop_selected(state: &mut ProcessState) -> UiEvent {
+        trace!("ProcessWidget::stop_selected");
+        let selected_processes = Self::get_selected_processes(state);
+        UiEvent::JockerAction(JockerAction::Stop(selected_processes))
     }
 
     fn toggle_select(state: &mut ProcessState) -> UiEvent {

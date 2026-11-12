@@ -89,7 +89,6 @@ impl StackState {
                         ActiveWidgetEvent::Down => Some(Self::scroll_down(&mut state.table_state)),
                         ActiveWidgetEvent::Up => Some(Self::scroll_up(&mut state.table_state)),
                         ActiveWidgetEvent::Select => Some(Self::toggle_select(&mut state)),
-                        _ => None,
                     }
                 }
                 UiEvent::SelectProcessWidget => {

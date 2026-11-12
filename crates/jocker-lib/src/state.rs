@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
-    fs::{canonicalize, create_dir_all, File},
+    fs::{File, canonicalize, create_dir_all},
     hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -15,10 +15,10 @@ use crate::{
         cargo::{BinaryPackage, Cargo},
         pueue::Pueue,
     },
-    common::{Binary, Process, ProcessState, Stack, JOCKER, JOCKER_ENV_STACK, MAX_RECURSION_LEVEL},
+    common::{Binary, JOCKER, JOCKER_ENV_STACK, MAX_RECURSION_LEVEL, Process, ProcessState, Stack},
     config::{ConfigFile, ConfigStack},
     database::Database,
-    error::{lock_error, Error, InnerError, Result},
+    error::{Error, InnerError, Result, lock_error},
 };
 
 #[derive(Debug, PartialEq)]
@@ -379,12 +379,12 @@ impl State {
         } else {
             HashMap::new()
         };
-        if let Some(default_stack) = default_stack.as_ref() {
-            if !stacks.contains_key(default_stack) {
-                return Err(Error::new(InnerError::StackNotFound(
-                    default_stack.to_owned(),
-                )));
-            }
+        if let Some(default_stack) = default_stack.as_ref()
+            && !stacks.contains_key(default_stack)
+        {
+            return Err(Error::new(InnerError::StackNotFound(
+                default_stack.to_owned(),
+            )));
         }
         self.set_stacks(stacks.values().cloned().collect::<Vec<Stack>>().as_slice())
             .await?;

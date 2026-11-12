@@ -5,11 +5,11 @@ resolver = "2"
 [workspace.package]
 version = "0.5.1"
 authors = ["wykiki@proton.me"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 readme = "README.md"
 repository = "https://gitlab.com/wykiki/jocker"
-rust-version = "1.92.0"
+rust-version = "1.99.1"
 description = """
 Run your monorepo binaries locally with ease !
 """

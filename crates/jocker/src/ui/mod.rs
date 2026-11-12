@@ -226,6 +226,7 @@ impl Ui {
                 warn!("Unhandled JockerEvent {event:?}");
                 None
             }
+            _ => None,
         }
     }
 
@@ -337,17 +338,17 @@ impl Ui {
                 kind: KeyEventKind::Press,
                 code: KeyCode::Char('s'),
                 ..
-            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Start)),
+            }) => Some(UiEvent::StartProcesses),
             Event::Key(KeyEvent {
                 kind: KeyEventKind::Press,
                 code: KeyCode::Char('S'),
                 ..
-            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Stop)),
+            }) => Some(UiEvent::StopProcesses),
             Event::Key(KeyEvent {
                 kind: KeyEventKind::Press,
                 code: KeyCode::Char('r'),
                 ..
-            }) => Some(UiEvent::ActiveWidget(ActiveWidgetEvent::Restart)),
+            }) => Some(UiEvent::RestartProcesses),
             _ => None,
         }
     }

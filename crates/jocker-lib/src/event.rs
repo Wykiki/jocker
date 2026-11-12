@@ -16,11 +16,21 @@ pub enum JockerEvent {
     ProcessStateChange((ProcessName, ProcessState)),
     /// Jocker main process aborted with a reason
     Abort(String),
+    /// Generic message for UI feedback
+    Message(JockerMessage),
     // Building(ProcessName),
     // Starting(ProcessName),
     // Running(ProcessName),
     // Stopping(ProcessName),
     // Stopped(ProcessName),
+}
+
+#[derive(Debug, Clone)]
+pub enum JockerMessage {
+    ProcessAlreadyStarted(String),
+    ProcessAlreadyStopped(String),
+    ProcessStartError(String, String),
+    ProcessStopping(String),
 }
 
 pub trait SendOrLog<T> {

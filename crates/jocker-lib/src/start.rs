@@ -10,7 +10,7 @@ use crate::{
     command::{cargo::Cargo, util::CommandLogger},
     common::{Exec, Process, ProcessState},
     error::{Error, InnerError, Result},
-    event::{JockerEvent, SendOrLog},
+    event::{JockerEvent, JockerMessage, SendOrLog},
     state::State,
 };
 
@@ -83,14 +83,7 @@ impl Start {
         for process in processes {
             let process_name = process.name().to_string();
 
-            event_tx
-                .send_or_log(JockerEvent::ProcessStateChange((
-                    process_name.clone(),
-                    ProcessState::Starting,
-                )))
-                .await;
-
-            if let Err(e) = self.run_process(process).await {
+            if let Err(e) = self.run_process(process, event_tx.clone()).await {
                 println!("Error while starting process {process_name}: {e}");
                 event_tx
                     .send_or_log(JockerEvent::ProcessStateChange((
@@ -98,11 +91,10 @@ impl Start {
                         ProcessState::Stopped,
                     )))
                     .await;
-            } else {
                 event_tx
-                    .send_or_log(JockerEvent::ProcessStateChange((
+                    .send_or_log(JockerEvent::Message(JockerMessage::ProcessStartError(
                         process_name.clone(),
-                        ProcessState::Running,
+                        e.to_string(),
                     )))
                     .await;
             }
@@ -110,13 +102,26 @@ impl Start {
         Ok(())
     }
 
-    async fn run_process(&self, process: Process) -> Result<()> {
+    async fn run_process(
+        &self,
+        process: Process,
+        event_tx: mpsc::Sender<JockerEvent>,
+    ) -> Result<()> {
+        let process_name = process.name().to_string();
         if process.state != ProcessState::Stopped && process.state != ProcessState::Building {
-            println!("Process is already started: {}", process.name());
+            event_tx
+                .send_or_log(JockerEvent::Message(JockerMessage::ProcessAlreadyStarted(
+                    process_name,
+                )))
+                .await;
             return Ok(());
         }
-        let process_name = process.name().to_string();
-        println!("Starting process {process_name} ...");
+        event_tx
+            .send_or_log(JockerEvent::ProcessStateChange((
+                process_name.clone(),
+                ProcessState::Starting,
+            )))
+            .await;
         let mut env: HashMap<String, String> = HashMap::new();
         if let Ok(dotenv) = dotenv_iter() {
             for (key, val) in dotenv.flatten() {
@@ -149,7 +154,12 @@ impl Start {
             .set_state(process.name(), ProcessState::Running)
             .await?;
         self.state.set_pid(process.name(), Some(pid)).await?;
-        println!("Process {process_name} started");
+        event_tx
+            .send_or_log(JockerEvent::ProcessStateChange((
+                process_name.clone(),
+                ProcessState::Running,
+            )))
+            .await;
         Ok(())
     }
 }
@@ -157,9 +167,7 @@ impl Start {
 impl Exec<()> for Start {
     async fn exec(&self) -> Result<()> {
         let (tx, _rx) = mpsc::channel(64);
-        self.run(tx.clone()).await?;
-
-        Ok(())
+        self.run(tx.clone()).await
     }
 }
 

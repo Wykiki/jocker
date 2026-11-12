@@ -1,10 +1,10 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    io::stdout,
     io::Write,
+    io::stdout,
     sync::Arc,
 };
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
@@ -109,10 +109,10 @@ impl Exec<()> for Logs {
                 };
                 let mut lock = stdout().lock();
                 for line in lines {
-                    if self.args.process_prefix {
-                        if let Err(e) = write!(lock, "{process_name:max_process_name_len$} > ") {
-                            warn!("unable to write process name to console: {e}")
-                        }
+                    if self.args.process_prefix
+                        && let Err(e) = write!(lock, "{process_name:max_process_name_len$} > ")
+                    {
+                        warn!("unable to write process name to console: {e}")
                     }
                     if let Err(e) = writeln!(lock, "{line}") {
                         warn!("unable to write log line to console: {e}")

@@ -18,8 +18,8 @@ use jocker_lib::state::State;
 use jocker_lib::stop::Stop;
 
 use ::tracing::{info, warn};
-use tabled::settings::Style;
 use tabled::Table;
+use tabled::settings::Style;
 use ui::Ui;
 
 use crate::signal::shutdown_signal;

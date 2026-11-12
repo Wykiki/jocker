@@ -7,10 +7,13 @@ pub enum UiEvent {
     JockerAction(JockerAction),
     JockerEvent(JockerEvent),
     FetchedProcesses,
+    RestartProcesses,
     SelectProcessWidget,
     SelectStackWidget,
     SelectedProcesses(Vec<String>),
     SelectedStack(String),
+    StartProcesses,
+    StopProcesses,
     NewLogs,
     Quit,
     /// A termination signal was received and the ui must shut down.
@@ -24,9 +27,6 @@ pub enum ActiveWidgetEvent {
     Down,
     Up,
     Select,
-    Start,
-    Stop,
-    Restart,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
